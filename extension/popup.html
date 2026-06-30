@@ -1,0 +1,1036 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>OpenFoxy</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <div class="app" id="app" data-state="idle">
+      <!-- ============== TOPBAR ============== -->
+      <header class="topbar">
+        <div class="brand">
+          <span class="brand-logo" aria-hidden="true">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="27 33 346 326">
+              <path
+                class="brand-logo-main"
+                fill="currentColor"
+                d="M77.397 33.101C77.133 33.53 75.357 43.008 74.515 48.485 69.502 81.114 70.035 115.462 76.086 149.719l1.12 6.338-11.41 11.533c-6.276 6.344-12.008 12.253-12.74 13.133l-1.329 1.6 6.752.035c3.714.018 7.255.163 7.869.32l1.116.285-2.392 1.623c-15.377 10.427-31.897 31.172-37.526 47.122-.567 1.607-.977 1.604 4.511.028 8.616-2.474 22.085-5.124 24.827-4.884l1.172.102-1.159 1.914c-8.252 13.626-14.23 32.071-15.713 48.484-.351 3.891-.649 3.7 2.72 1.75 7.999-4.631 16.126-7.711 23.07-8.744l1.423-.212-3.895 3.973c-2.143 2.186-3.896 4.111-3.896 4.278 0 .176 2.396.378 5.662.477 30.334.922 57.734 14.109 84.038 40.447l7.883 7.892-1.942-3.878c-17.511-34.978-48.213-65.872-73.95-74.412l-1.755-.582 1.436-.224c8.61-1.339 26.805.877 37.138 4.525 25.93 9.152 48.244 33.372 60.185 65.326.896 2.398 1.664 4.398 1.705 4.444.042.047.602-.135 1.244-.404 8.949-3.739 24.531-3.886 34.949-.329 1.302.444 2.39.772 2.418.729.028-.044.449-1.219.935-2.613 10.793-30.936 34.215-57.165 59.352-66.465 11.592-4.288 27.857-6.497 38.386-5.212l1.703.207-2.565.907c-22.629 8-48.736 32.461-66.782 62.57-2.273 3.793-8.221 14.827-8.221 15.253-.001.143 1.17-1.005 2.598-2.552 26.729-28.922 57.204-44.483 89.427-45.664l5.741-.211-4.121-4.226c-2.267-2.325-3.969-4.227-3.783-4.227 4.479 0 16.251 4.357 23.649 8.753 1.642.976 3.086 1.774 3.209 1.774.123 0 .046-1.83-.173-4.067-1.577-16.154-6.989-33.164-14.808-46.543-1.045-1.786-1.899-3.318-1.899-3.402 0-.794 17.573 2.624 25.993 5.056 2.63.76 4.826 1.337 4.881 1.282.055-.055-.698-1.945-1.674-4.2-7.085-16.375-21.146-33.604-35.886-43.974l-2.699-1.898 1.104-.282c.607-.155 4.142-.298 7.856-.316l6.752-.035-2.919-3.203c-1.605-1.762-7.448-7.724-12.983-13.251l-10.065-10.048 1.032-5.582c1.91-10.343 3.241-20.607 4.322-33.333.553-6.513.555-38.441.002-44.976-1.122-13.265-2.386-22.936-4.342-33.201-1.275-6.696-.774-6.168-4.361-4.589-27.168 11.955-54.37 33.199-84.218 65.772l-1.089 1.187-2.392-.471c-18.859-3.711-47.569-3.567-64.949.328-.543.121-1.533-.789-5.058-4.649-25.88-28.34-54.282-50.21-80.515-62-3.536-1.59-3.442-1.559-3.66-1.206Zm117.021 295.773c-5.69.729-12.154 2.98-16.61 5.787l-2.645 1.666.657.922c3.39 4.76 17.787 17.781 22.984 20.787l1.515.876 1.515-.881c5.192-3.021 14.351-11.114 21.179-18.714 2.999-3.338 2.974-2.757.193-4.478-8.046-4.978-18.911-7.229-28.788-5.965Z"
+              />
+              <path
+                fill="#fb041b"
+                d="M328.658 93.301 C 328.659 94.705,328.715 95.239,328.783 94.489 C 328.850 93.739,328.849 92.591,328.781 91.937 C 328.712 91.284,328.657 91.898,328.658 93.301 M105.582 209.250 L 105.582 233.174 200.000 233.174 L 294.418 233.174 L 294.418 209.250 L 294.418 185.327 L 200.000 185.327 L 105.582 185.327 L 105.582 209.250 Z"
+              />
+            </svg>
+          </span>
+          <span class="brand-name">PROXY<b>FOXY</b></span>
+        </div>
+        <div class="top-actions">
+          <span class="status-pill" id="topStatus">
+            <span class="status-dot"></span>
+            <span id="topStatusText">Idle</span>
+          </span>
+          <button
+            class="icon-btn"
+            id="themeQuickToggle"
+            title="Toggle theme"
+            aria-label="Toggle theme"
+          >
+            <svg
+              id="themeIcon"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              width="14"
+              height="14"
+            >
+              <circle cx="12" cy="12" r="4"></circle>
+              <path
+                d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"
+              ></path>
+            </svg>
+          </button>
+        </div>
+      </header>
+
+      <!-- ============== HOME VIEW ============== -->
+      <section class="view home active" data-view="home">
+        <span class="status-pill" id="homePill">
+          <span class="status-dot"></span>
+          <span id="homePillText">Tap orb to connect</span>
+        </span>
+
+        <div class="orb-wrap" id="connectOrb" role="button" aria-label="Connect">
+          <svg class="orb-svg" viewBox="0 0 240 240" aria-hidden="true">
+            <!-- Outer subtle ring -->
+            <circle class="orb-ring ring-1" cx="120" cy="120" r="115" />
+            <!-- Mid ring -->
+            <circle class="orb-ring ring-2" cx="120" cy="120" r="98" />
+            <!-- Inner dotted ring -->
+            <circle class="orb-ring ring-3" cx="120" cy="120" r="80" />
+            <!-- Pulse waves -->
+            <circle class="orb-pulse" cx="120" cy="120" r="68" />
+            <circle class="orb-pulse delay" cx="120" cy="120" r="68" />
+          </svg>
+          <div class="orb-core">
+            <svg
+              class="orb-fox"
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="27 33 346 326"
+              fill="currentColor"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <path
+                d="M77.397 33.101C77.133 33.53 75.357 43.008 74.515 48.485 69.502 81.114 70.035 115.462 76.086 149.719l1.12 6.338-11.41 11.533c-6.276 6.344-12.008 12.253-12.74 13.133l-1.329 1.6 6.752.035c3.714.018 7.255.163 7.869.32l1.116.285-2.392 1.623c-15.377 10.427-31.897 31.172-37.526 47.122-.567 1.607-.977 1.604 4.511.028 8.616-2.474 22.085-5.124 24.827-4.884l1.172.102-1.159 1.914c-8.252 13.626-14.23 32.071-15.713 48.484-.351 3.891-.649 3.7 2.72 1.75 7.999-4.631 16.126-7.711 23.07-8.744l1.423-.212-3.895 3.973c-2.143 2.186-3.896 4.111-3.896 4.278 0 .176 2.396.378 5.662.477 30.334.922 57.734 14.109 84.038 40.447l7.883 7.892-1.942-3.878c-17.511-34.978-48.213-65.872-73.95-74.412l-1.755-.582 1.436-.224c8.61-1.339 26.805.877 37.138 4.525 25.93 9.152 48.244 33.372 60.185 65.326.896 2.398 1.664 4.398 1.705 4.444.042.047.602-.135 1.244-.404 8.949-3.739 24.531-3.886 34.949-.329 1.302.444 2.39.772 2.418.729.028-.044.449-1.219.935-2.613 10.793-30.936 34.215-57.165 59.352-66.465 11.592-4.288 27.857-6.497 38.386-5.212l1.703.207-2.565.907c-22.629 8-48.736 32.461-66.782 62.57-2.273 3.793-8.221 14.827-8.221 15.253-.001.143 1.17-1.005 2.598-2.552 26.729-28.922 57.204-44.483 89.427-45.664l5.741-.211-4.121-4.226c-2.267-2.325-3.969-4.227-3.783-4.227 4.479 0 16.251 4.357 23.649 8.753 1.642.976 3.086 1.774 3.209 1.774.123 0 .046-1.83-.173-4.067-1.577-16.154-6.989-33.164-14.808-46.543-1.045-1.786-1.899-3.318-1.899-3.402 0-.794 17.573 2.624 25.993 5.056 2.63.76 4.826 1.337 4.881 1.282.055-.055-.698-1.945-1.674-4.2-7.085-16.375-21.146-33.604-35.886-43.974l-2.699-1.898 1.104-.282c.607-.155 4.142-.298 7.856-.316l6.752-.035-2.919-3.203c-1.605-1.762-7.448-7.724-12.983-13.251l-10.065-10.048 1.032-5.582c1.91-10.343 3.241-20.607 4.322-33.333.553-6.513.555-38.441.002-44.976-1.122-13.265-2.386-22.936-4.342-33.201-1.275-6.696-.774-6.168-4.361-4.589-27.168 11.955-54.37 33.199-84.218 65.772l-1.089 1.187-2.392-.471c-18.859-3.711-47.569-3.567-64.949.328-.543.121-1.533-.789-5.058-4.649-25.88-28.34-54.282-50.21-80.515-62-3.536-1.59-3.442-1.559-3.66-1.206Zm117.021 295.773c-5.69.729-12.154 2.98-16.61 5.787l-2.645 1.666.657.922c3.39 4.76 17.787 17.781 22.984 20.787l1.515.876 1.515-.881c5.192-3.021 14.351-11.114 21.179-18.714 2.999-3.338 2.974-2.757.193-4.478-8.046-4.978-18.911-7.229-28.788-5.965Z"
+              />
+            </svg>
+          </div>
+        </div>
+
+        <div class="home-status">
+          <div class="home-status-label">Status</div>
+          <div class="home-status-value" id="homeStatusValue">Disconnected</div>
+        </div>
+
+        <div class="home-active-card" id="homeActiveCard">
+          <div class="home-active-emoji" id="homeActiveEmoji">🦊</div>
+          <div class="home-active-info">
+            <div class="home-active-name" id="homeActiveName">No profile</div>
+            <div class="home-active-host" id="homeActiveHost">Select a profile to connect</div>
+          </div>
+          <button class="home-change-btn" id="homeChangeBtn">Change</button>
+        </div>
+
+        <div class="home-stats">
+          <div class="home-stat">
+            <div class="home-stat-label">Ping</div>
+            <div class="home-stat-value" id="statPing">— ms</div>
+          </div>
+          <div class="home-stat">
+            <div class="home-stat-label">Up</div>
+            <div class="home-stat-value" id="statUp">0 KB</div>
+          </div>
+          <div class="home-stat">
+            <div class="home-stat-label">Down</div>
+            <div class="home-stat-value" id="statDown">0 KB</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============== PROFILES VIEW ============== -->
+      <section class="view" data-view="profiles">
+        <div class="view-header">
+          <div>
+            <div class="view-title">Profiles</div>
+            <div class="view-subtitle" id="profileCount">0 saved</div>
+          </div>
+          <button class="add-btn" id="addProfileBtn">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.5"
+              stroke-linecap="round"
+            >
+              <path d="M12 5v14M5 12h14" />
+            </svg>
+            New
+          </button>
+        </div>
+        <div class="profile-list" id="profileList"></div>
+      </section>
+
+      <!-- ============== SETTINGS VIEW ============== -->
+      <section class="view" data-view="settings">
+        <div class="view-header">
+          <div>
+            <div class="view-title">Settings</div>
+            <div class="view-subtitle">Privacy &amp; fingerprint</div>
+          </div>
+        </div>
+
+        <!-- Appearance -->
+        <div class="settings-group open" data-group>
+          <button class="settings-group-head" type="button">
+            <span class="gh-left">
+              <span class="gh-icon">
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <circle cx="12" cy="12" r="9" />
+                  <path d="M12 3a9 9 0 0 0 0 18" />
+                </svg>
+              </span>
+              <span class="gh-title">Appearance</span>
+            </span>
+            <span class="gh-count">2</span>
+            <svg
+              class="gh-chevron"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="M6 9l6 6 6-6" />
+            </svg>
+          </button>
+          <div class="settings-group-body">
+            <div class="settings-row">
+              <div class="settings-row-label">
+                <div class="settings-label">Theme</div>
+                <div class="settings-hint">Light or dark interface</div>
+              </div>
+              <div class="theme-toggle-group" id="themeToggleGroup">
+                <button data-theme="dark" class="active">Dark</button>
+                <button data-theme="light">Light</button>
+              </div>
+            </div>
+            <div class="settings-row">
+              <div class="settings-row-label">
+                <div class="settings-label">Reduced motion</div>
+                <div class="settings-hint">Disable orb &amp; UI animations</div>
+              </div>
+              <div class="switch" data-key="reducedMotion"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Connection -->
+        <div class="settings-group open" data-group>
+          <button class="settings-group-head" type="button">
+            <span class="gh-left">
+              <span class="gh-icon">
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <path d="M5 12.55a11 11 0 0 1 14 0" />
+                  <path d="M8.5 16.05a6 6 0 0 1 7 0" />
+                  <circle cx="12" cy="20" r="1.2" fill="currentColor" />
+                </svg>
+              </span>
+              <span class="gh-title">Connection</span>
+            </span>
+            <span class="gh-count">2</span>
+            <svg
+              class="gh-chevron"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="M6 9l6 6 6-6" />
+            </svg>
+          </button>
+          <div class="settings-group-body">
+            <div class="settings-row">
+              <div class="settings-row-label">
+                <div class="settings-label">Auto-connect on launch</div>
+                <div class="settings-hint">Reconnect last active profile</div>
+              </div>
+              <div class="switch" data-key="autoConnect"></div>
+            </div>
+            <div class="settings-row">
+              <div class="settings-row-label">
+                <div class="settings-label">Kill switch</div>
+                <div class="settings-hint">Block all traffic if tunnel drops</div>
+              </div>
+              <div class="switch on" data-key="killSwitch"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Browser fingerprint -->
+        <div class="settings-group" data-group>
+          <button class="settings-group-head" type="button">
+            <span class="gh-left">
+              <span class="gh-icon">
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <circle cx="12" cy="12" r="9" />
+                  <path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18" />
+                </svg>
+              </span>
+              <span class="gh-title">Browser fingerprint</span>
+            </span>
+            <span class="gh-count">7</span>
+            <svg
+              class="gh-chevron"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="M6 9l6 6 6-6" />
+            </svg>
+          </button>
+          <div class="settings-group-body">
+            <div class="settings-row">
+              <div class="settings-row-label">
+                <div class="settings-label">Canvas fingerprint</div>
+                <div class="settings-hint">Inject pixel noise into 2D canvas</div>
+              </div>
+              <div class="switch on" data-key="canvasNoise"></div>
+            </div>
+            <div class="settings-row">
+              <div class="settings-row-label">
+                <div class="settings-label">Audio fingerprint</div>
+                <div class="settings-hint">Add jitter to AudioContext</div>
+              </div>
+              <div class="switch on" data-key="audioNoise"></div>
+            </div>
+            <div class="settings-row">
+              <div class="settings-row-label">
+                <div class="settings-label">WebGL renderer</div>
+                <div class="settings-hint">Mask GPU vendor &amp; renderer strings</div>
+              </div>
+              <div class="switch on" data-key="webglSpoof"></div>
+            </div>
+            <div class="settings-row">
+              <div class="settings-row-label">
+                <div class="settings-label">Font enumeration</div>
+                <div class="settings-hint">Limit detected fonts to common set</div>
+              </div>
+              <div class="switch on" data-key="fontMask"></div>
+            </div>
+            <div class="settings-row">
+              <div class="settings-row-label">
+                <div class="settings-label">Math.random jitter</div>
+                <div class="settings-hint">Detect &amp; spoof Math fingerprinting</div>
+              </div>
+              <div class="switch" data-key="mathJitter"></div>
+            </div>
+            <div class="settings-row">
+              <div class="settings-row-label">
+                <div class="settings-label">Plugins &amp; MIME types</div>
+                <div class="settings-hint">Return empty navigator.plugins</div>
+              </div>
+              <div class="switch on" data-key="plugins"></div>
+            </div>
+            <div class="settings-row">
+              <div class="settings-row-label">
+                <div class="settings-label">Client Hints (Sec-CH-UA)</div>
+                <div class="settings-hint">Match Sec-CH-UA-* with profile UA</div>
+              </div>
+              <div class="switch on" data-key="clientHints"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Hardware fingerprint -->
+        <div class="settings-group" data-group>
+          <button class="settings-group-head" type="button">
+            <span class="gh-left">
+              <span class="gh-icon">
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <rect x="4" y="4" width="16" height="16" rx="2" />
+                  <rect x="9" y="9" width="6" height="6" />
+                  <path d="M9 1v3M15 1v3M9 20v3M15 20v3M1 9h3M1 15h3M20 9h3M20 15h3" />
+                </svg>
+              </span>
+              <span class="gh-title">Hardware fingerprint</span>
+            </span>
+            <span class="gh-count">5</span>
+            <svg
+              class="gh-chevron"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="M6 9l6 6 6-6" />
+            </svg>
+          </button>
+          <div class="settings-group-body">
+            <div class="settings-row">
+              <div class="settings-row-label">
+                <div class="settings-label">CPU cores spoofing</div>
+                <div class="settings-hint">Override hardwareConcurrency</div>
+              </div>
+              <div class="switch on" data-key="cpuSpoof"></div>
+            </div>
+            <div class="settings-row">
+              <div class="settings-row-label">
+                <div class="settings-label">Device memory spoofing</div>
+                <div class="settings-hint">Override navigator.deviceMemory</div>
+              </div>
+              <div class="switch on" data-key="memorySpoof"></div>
+            </div>
+            <div class="settings-row">
+              <div class="settings-row-label">
+                <div class="settings-label">Battery API mask</div>
+                <div class="settings-hint">Return charging=true, level=1.0</div>
+              </div>
+              <div class="switch on" data-key="batteryMask"></div>
+            </div>
+            <div class="settings-row">
+              <div class="settings-row-label">
+                <div class="settings-label">Network Information API</div>
+                <div class="settings-hint">Spoof effectiveType &amp; downlink</div>
+              </div>
+              <div class="switch on" data-key="netInfo"></div>
+            </div>
+            <div class="settings-row">
+              <div class="settings-row-label">
+                <div class="settings-label">Touch points</div>
+                <div class="settings-hint">Match maxTouchPoints to platform</div>
+              </div>
+              <div class="switch on" data-key="touchPoints"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Display fingerprint -->
+        <div class="settings-group" data-group>
+          <button class="settings-group-head" type="button">
+            <span class="gh-left">
+              <span class="gh-icon">
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <rect x="2" y="4" width="20" height="14" rx="2" />
+                  <path d="M8 22h8M12 18v4" />
+                </svg>
+              </span>
+              <span class="gh-title">Display fingerprint</span>
+            </span>
+            <span class="gh-count">4</span>
+            <svg
+              class="gh-chevron"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="M6 9l6 6 6-6" />
+            </svg>
+          </button>
+          <div class="settings-group-body">
+            <div class="settings-row">
+              <div class="settings-row-label">
+                <div class="settings-label">Screen resolution</div>
+                <div class="settings-hint">Override screen.width / height</div>
+              </div>
+              <div class="switch on" data-key="screenRes"></div>
+            </div>
+            <div class="settings-row">
+              <div class="settings-row-label">
+                <div class="settings-label">Color depth</div>
+                <div class="settings-hint">Override screen.colorDepth</div>
+              </div>
+              <div class="switch on" data-key="colorDepth"></div>
+            </div>
+            <div class="settings-row">
+              <div class="settings-row-label">
+                <div class="settings-label">Pixel ratio</div>
+                <div class="settings-hint">Override devicePixelRatio</div>
+              </div>
+              <div class="switch on" data-key="pixelRatio"></div>
+            </div>
+            <div class="settings-row">
+              <div class="settings-row-label">
+                <div class="settings-label">prefers-color-scheme</div>
+                <div class="settings-hint">Match CSS theme to profile</div>
+              </div>
+              <div class="switch" data-key="prefersScheme"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Privacy -->
+        <div class="settings-group" data-group>
+          <button class="settings-group-head" type="button">
+            <span class="gh-left">
+              <span class="gh-icon">
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                </svg>
+              </span>
+              <span class="gh-title">Privacy</span>
+            </span>
+            <span class="gh-count">4</span>
+            <svg
+              class="gh-chevron"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="M6 9l6 6 6-6" />
+            </svg>
+          </button>
+          <div class="settings-group-body">
+            <div class="settings-row">
+              <div class="settings-row-label">
+                <div class="settings-label">Block trackers</div>
+                <div class="settings-hint">Filter known tracking domains</div>
+              </div>
+              <div class="switch on" data-key="blockTrackers"></div>
+            </div>
+            <div class="settings-row">
+              <div class="settings-row-label">
+                <div class="settings-label">Strip referrer</div>
+                <div class="settings-hint">Remove Referer instead of using browser default</div>
+              </div>
+              <div class="switch referrer-switch" data-key="referrer"></div>
+            </div>
+            <div class="settings-row">
+              <div class="settings-row-label">
+                <div class="settings-label">Do Not Track</div>
+                <div class="settings-hint">Send DNT=1 header</div>
+              </div>
+              <div class="switch" data-key="dnt"></div>
+            </div>
+            <div class="settings-row">
+              <div class="settings-row-label">
+                <div class="settings-label">Global Privacy Control</div>
+                <div class="settings-hint">Send Sec-GPC=1 header</div>
+              </div>
+              <div class="switch on" data-key="gpc"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Permissions -->
+        <div class="settings-group" data-group>
+          <button class="settings-group-head" type="button">
+            <span class="gh-left">
+              <span class="gh-icon">
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <rect x="4" y="11" width="16" height="10" rx="2" />
+                  <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+                </svg>
+              </span>
+              <span class="gh-title">Permissions</span>
+            </span>
+            <span class="gh-count">5</span>
+            <svg
+              class="gh-chevron"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="M6 9l6 6 6-6" />
+            </svg>
+          </button>
+          <div class="settings-group-body">
+            <div class="settings-row">
+              <div class="settings-row-label">
+                <div class="settings-label">Geolocation</div>
+                <div class="settings-hint">Block site geolocation requests</div>
+              </div>
+              <div class="switch on" data-key="permGeo"></div>
+            </div>
+            <div class="settings-row">
+              <div class="settings-row-label">
+                <div class="settings-label">Camera</div>
+                <div class="settings-hint">Block getUserMedia (video)</div>
+              </div>
+              <div class="switch on" data-key="permCam"></div>
+            </div>
+            <div class="settings-row">
+              <div class="settings-row-label">
+                <div class="settings-label">Microphone</div>
+                <div class="settings-hint">Block getUserMedia (audio)</div>
+              </div>
+              <div class="switch on" data-key="permMic"></div>
+            </div>
+            <div class="settings-row">
+              <div class="settings-row-label">
+                <div class="settings-label">Clipboard read</div>
+                <div class="settings-hint">Block clipboard.readText()</div>
+              </div>
+              <div class="switch on" data-key="permClip"></div>
+            </div>
+            <div class="settings-row">
+              <div class="settings-row-label">
+                <div class="settings-label">Media devices enumeration</div>
+                <div class="settings-hint">Hide device IDs from sites</div>
+              </div>
+              <div class="switch on" data-key="permDevices"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Notifications -->
+        <div class="settings-group" data-group>
+          <button class="settings-group-head" type="button">
+            <span class="gh-left">
+              <span class="gh-icon">
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
+                  <path d="M13.7 21a2 2 0 0 1-3.4 0" />
+                </svg>
+              </span>
+              <span class="gh-title">Notifications</span>
+            </span>
+            <span class="gh-count">0</span>
+            <svg
+              class="gh-chevron"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="M6 9l6 6 6-6" />
+            </svg>
+          </button>
+          <div class="settings-group-body">
+            <div class="empty-state"><p>No notification controls are implemented yet.</p></div>
+          </div>
+        </div>
+
+        <div class="settings-about">OpenFoxy · v1.0.0</div>
+      </section>
+
+      <!-- ============== BOTTOM NAV ============== -->
+      <nav class="bottom-nav">
+        <button class="nav-item active" data-nav="home">
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <path d="M3 9.5L12 3l9 6.5V21H3V9.5z" />
+            <path d="M9 21V12h6v9" />
+          </svg>
+          Home
+        </button>
+        <button class="nav-item" data-nav="profiles">
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <rect x="3" y="4" width="18" height="6" rx="2" />
+            <rect x="3" y="14" width="18" height="6" rx="2" />
+            <circle cx="7" cy="7" r="1" fill="currentColor" />
+            <circle cx="7" cy="17" r="1" fill="currentColor" />
+          </svg>
+          Profiles
+        </button>
+        <button class="nav-item" data-nav="settings">
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <circle cx="12" cy="12" r="3" />
+            <path
+              d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 0 1-4 0v-.1a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 0 1 0-4h.1a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3 1.7 1.7 0 0 0 1-1.5V3a2 2 0 0 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8 1.7 1.7 0 0 0 1.5 1H21a2 2 0 0 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"
+            />
+          </svg>
+          Settings
+        </button>
+      </nav>
+
+      <!-- ============== MODAL ============== -->
+      <div class="modal" id="profileModal">
+        <header class="modal-header">
+          <span class="modal-title" id="modalTitle">New profile</span>
+          <button class="icon-btn" id="closeModalBtn" aria-label="Close">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              width="14"
+              height="14"
+            >
+              <path d="M18 6L6 18M6 6l12 12" />
+            </svg>
+          </button>
+        </header>
+
+        <div class="modal-body">
+          <!-- ===== IDENTITY ===== -->
+          <div class="form-section">Identity</div>
+
+          <div class="field">
+            <div class="field-label">
+              <span>Emoji &amp; name</span>
+              <span class="field-hint">Tap emoji to pick or type one</span>
+            </div>
+            <div class="emoji-row">
+              <button type="button" class="emoji-display" id="emojiDisplay">🦊</button>
+              <input
+                type="text"
+                class="emoji-name-input"
+                id="profileNameInput"
+                placeholder="Profile name"
+              />
+            </div>
+            <div class="emoji-grid-wrap" id="emojiGridWrap">
+              <div class="emoji-group-label">Flags</div>
+              <div class="emoji-grid" id="emojiGridFlags"></div>
+              <div class="emoji-group-label">Animals</div>
+              <div class="emoji-grid" id="emojiGridAnimals"></div>
+              <div class="emoji-group-label">Objects</div>
+              <div class="emoji-grid" id="emojiGridObjects"></div>
+              <div class="custom-emoji-row">
+                <input
+                  type="text"
+                  id="customEmojiInput"
+                  placeholder="Paste any emoji…"
+                  maxlength="8"
+                />
+                <button type="button" id="customEmojiApply">Apply</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- ===== PROXY ===== -->
+          <div class="form-section">Proxy</div>
+
+          <div class="field">
+            <div class="field-label"><span>Protocol</span></div>
+            <div class="btn-group cols-3" id="protocolGroup">
+              <button type="button" data-value="socks5" class="active">SOCKS5</button>
+              <button type="button" data-value="http">HTTP</button>
+              <button type="button" data-value="residential">Residential</button>
+            </div>
+          </div>
+
+          <div class="field">
+            <div class="field-label">
+              <span>Quick paste</span>
+              <span class="field-hint">user:pass@host:port</span>
+            </div>
+            <div class="quick-paste" id="quickPasteWrap">
+              <input
+                type="text"
+                class="input"
+                id="quickPasteInput"
+                placeholder="res_user:res_pass@10.24.3.8:8003"
+              />
+              <span class="quick-paste-hint" id="quickPasteHint">parsed</span>
+            </div>
+          </div>
+
+          <div class="field">
+            <div class="field-label">
+              <span>Host &amp; port</span>
+            </div>
+            <div class="input-row">
+              <input type="text" class="input" id="hostInput" placeholder="proxy.example.com" />
+              <input
+                type="text"
+                class="input"
+                id="portInput"
+                placeholder="1080"
+                inputmode="numeric"
+              />
+            </div>
+          </div>
+
+          <div class="field">
+            <div class="field-label">
+              <span>Credentials</span>
+              <span class="field-hint">Optional</span>
+            </div>
+            <div class="input-row even">
+              <input
+                type="text"
+                class="input"
+                id="userInput"
+                placeholder="username"
+                autocomplete="off"
+              />
+              <input
+                type="text"
+                class="input"
+                id="passInput"
+                placeholder="password"
+                autocomplete="off"
+              />
+            </div>
+          </div>
+
+          <!-- ===== ACTIVATION ===== -->
+          <div class="form-section">Activation</div>
+
+          <div class="field">
+            <div class="field-label">
+              <span>When to use this profile</span>
+            </div>
+            <div class="btn-group cols-4" id="activationGroup">
+              <button type="button" data-value="all" class="active">All</button>
+              <button type="button" data-value="include">Include</button>
+              <button type="button" data-value="exclude">Exclude</button>
+              <button type="button" data-value="pac">PAC</button>
+            </div>
+            <div class="conditional" id="patternsWrap">
+              <div class="field-label" style="margin-top: 8px">
+                <span>URL patterns</span>
+                <span class="field-hint">One per line</span>
+              </div>
+              <textarea
+                class="textarea"
+                id="patternsInput"
+                placeholder="*.example.com&#10;https://*.banking.com/*&#10;192.168.*"
+              ></textarea>
+            </div>
+            <div class="conditional" id="pacWrap">
+              <div class="field-label" style="margin-top: 8px">
+                <span>PAC script URL</span>
+              </div>
+              <input
+                type="text"
+                class="input"
+                id="pacUrlInput"
+                placeholder="https://example.com/proxy.pac"
+              />
+              <div class="field-label" style="margin-top: 8px">
+                <span>PAC script body</span>
+                <span class="field-hint">Optional inline</span>
+              </div>
+              <textarea
+                class="textarea"
+                id="pacBodyInput"
+                placeholder="function FindProxyForURL(url, host) {&#10;  return 'SOCKS5 10.24.3.8:8003';&#10;}"
+              ></textarea>
+            </div>
+          </div>
+
+          <!-- ===== LOCALIZATION ===== -->
+          <div class="form-section">Localization</div>
+
+          <div class="field">
+            <div class="field-label"><span>Timezone</span></div>
+            <div class="btn-group cols-2" id="timezoneGroup">
+              <button type="button" data-value="system">
+                <span id="tzSystemLabel">System</span>
+              </button>
+              <button type="button" data-value="proxy" class="active">Proxy IP</button>
+            </div>
+          </div>
+
+          <div class="field">
+            <div class="field-label">
+              <span>Language</span>
+              <span class="field-hint">Accept-Language</span>
+            </div>
+            <div class="chip-with-custom">
+              <div class="chip-group" id="languageChipGroup"></div>
+              <input
+                type="text"
+                class="chip-custom-input"
+                id="languageCustomInput"
+                placeholder="Custom locale… e.g. pt-BR,pt;q=0.9"
+              />
+            </div>
+          </div>
+
+          <!-- ===== USER AGENT ===== -->
+          <div class="form-section">User agent</div>
+
+          <div class="field">
+            <div class="field-label">
+              <span>Preset</span>
+              <span class="field-hint" id="uaActiveLabel">current</span>
+            </div>
+            <div class="chip-group" id="uaChipGroup"></div>
+            <input
+              type="text"
+              class="chip-custom-input"
+              id="uaCustomInput"
+              placeholder="Or paste custom User-Agent…"
+              style="margin-top: 6px"
+            />
+            <div class="ua-current" id="uaCurrent"></div>
+          </div>
+
+          <div class="field">
+            <div class="field-label">
+              <span>Platform</span>
+              <span class="field-hint">navigator.platform</span>
+            </div>
+            <div class="chip-with-custom">
+              <div class="chip-group" id="platformChipGroup"></div>
+              <input
+                type="text"
+                class="chip-custom-input"
+                id="platformCustomInput"
+                placeholder="Custom platform…"
+              />
+            </div>
+          </div>
+
+          <!-- ===== DISPLAY ===== -->
+          <div class="form-section">Display</div>
+
+          <div class="field">
+            <div class="field-label">
+              <span>Screen resolution</span>
+              <span class="field-hint">screen.width × height</span>
+            </div>
+            <div class="chip-with-custom">
+              <div class="chip-group" id="resolutionChipGroup"></div>
+              <input
+                type="text"
+                class="chip-custom-input"
+                id="resolutionCustomInput"
+                placeholder="Custom… e.g. 2560x1440"
+              />
+            </div>
+          </div>
+
+          <div class="field">
+            <div class="field-label">
+              <span>Color depth</span>
+              <span class="field-hint">bits per pixel</span>
+            </div>
+            <div class="chip-group" id="colorDepthChipGroup"></div>
+          </div>
+
+          <div class="field">
+            <div class="field-label">
+              <span>Pixel ratio</span>
+              <span class="field-hint">devicePixelRatio</span>
+            </div>
+            <div class="chip-group" id="pixelRatioChipGroup"></div>
+          </div>
+
+          <div class="field">
+            <div class="field-label">
+              <span>Touch points</span>
+              <span class="field-hint">maxTouchPoints</span>
+            </div>
+            <div class="chip-group" id="touchChipGroup"></div>
+          </div>
+
+          <!-- ===== HARDWARE ===== -->
+          <div class="form-section">Hardware</div>
+
+          <div class="field">
+            <div class="field-label">
+              <span>CPU cores</span>
+              <span class="field-hint">hardwareConcurrency</span>
+            </div>
+            <div class="chip-with-custom">
+              <div class="chip-group" id="hardwareChipGroup"></div>
+              <input
+                type="text"
+                class="chip-custom-input"
+                id="hardwareCustomInput"
+                placeholder="Custom… e.g. 12"
+                inputmode="numeric"
+              />
+            </div>
+          </div>
+
+          <div class="field">
+            <div class="field-label">
+              <span>Device memory</span>
+              <span class="field-hint">deviceMemory (GB)</span>
+            </div>
+            <div class="chip-with-custom">
+              <div class="chip-group" id="memoryChipGroup"></div>
+              <input
+                type="text"
+                class="chip-custom-input"
+                id="memoryCustomInput"
+                placeholder="Custom… e.g. 12"
+                inputmode="numeric"
+              />
+            </div>
+          </div>
+
+          <div class="field">
+            <div class="field-label">
+              <span>Network type</span>
+              <span class="field-hint">connection.effectiveType</span>
+            </div>
+            <div class="chip-group" id="networkChipGroup"></div>
+          </div>
+        </div>
+
+        <footer class="modal-footer">
+          <button class="btn-ghost" id="cancelBtn">Cancel</button>
+          <button class="btn-primary" id="saveBtn">Save profile</button>
+        </footer>
+      </div>
+    </div>
+
+    <script src="popup.js"></script>
+  </body>
+</html>

@@ -1,0 +1,21 @@
+FROM alpine:latest
+
+RUN apk add --no-cache \
+    nodejs npm squid apache2-utils dante-server \
+    curl tar iptables iproute2 bash openrc shadow \
+    && mkdir -p /run/openrc && touch /run/openrc/softlevel
+
+WORKDIR /app
+COPY package.json index.js ./
+RUN chmod +x /app/index.js && npm link
+
+RUN ARCH=$(uname -m) && \
+    if [ "$ARCH" = "aarch64" ]; then MTG_ARCH="arm64"; else MTG_ARCH="amd64"; fi && \
+    wget -qO- "https://github.com/9seconds/mtg/releases/download/v2.2.8/mtg-2.2.8-linux-${MTG_ARCH}.tar.gz" \
+    | tar -xz -C /tmp && \
+    mv /tmp/mtg-*/mtg /usr/local/bin/mtg && chmod +x /usr/local/bin/mtg
+
+COPY e2e/ /e2e/
+RUN chmod +x /e2e/*.sh /e2e/tests/*.sh
+
+ENTRYPOINT ["bash"]

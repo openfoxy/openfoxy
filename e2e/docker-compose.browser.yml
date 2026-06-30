@@ -1,0 +1,34 @@
+services:
+  browser-server:
+    build:
+      context: ..
+      dockerfile: e2e/Dockerfile.e2e
+    privileged: true
+    networks:
+      - openfoxy-browser
+    volumes:
+      - browser-shared:/shared
+    ports:
+      - "18080:18080"
+      - "11080:11080"
+      - "18083:18083"
+      - "19000:19000"
+    command: ["/e2e/browser-server.sh"]
+
+  browser-provider:
+    build:
+      context: ..
+      dockerfile: e2e/Dockerfile.e2e
+    networks:
+      - openfoxy-browser
+    volumes:
+      - browser-shared:/shared
+    depends_on:
+      - browser-server
+    command: ["/e2e/browser-provider.sh"]
+
+networks:
+  openfoxy-browser:
+
+volumes:
+  browser-shared:

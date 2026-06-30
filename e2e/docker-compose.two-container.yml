@@ -1,0 +1,29 @@
+services:
+  server:
+    build:
+      context: ..
+      dockerfile: e2e/Dockerfile.e2e
+    privileged: true
+    networks:
+      - openfoxy
+    volumes:
+      - shared:/shared
+    command: ["/e2e/two-container-server.sh"]
+
+  provider:
+    build:
+      context: ..
+      dockerfile: e2e/Dockerfile.e2e
+    networks:
+      - openfoxy
+    volumes:
+      - shared:/shared
+    depends_on:
+      - server
+    command: ["/e2e/two-container-provider.sh"]
+
+networks:
+  openfoxy:
+
+volumes:
+  shared:

@@ -1,0 +1,11 @@
+services:
+  server:
+    build:
+      context: ..
+      dockerfile: e2e/Dockerfile.e2e
+    privileged: true
+    networks:
+      - openfoxy
+    command: ["/e2e/run.sh"]
+networks:
+  openfoxy:

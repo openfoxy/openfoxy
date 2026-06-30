@@ -38,6 +38,7 @@ console.log("🦊 Running OpenFoxy Basic Sanity Tests...");
       buildPacScript,
       buildProxyConfig,
       proxyAddress,
+      unsupportedAuthenticatedSocks5,
       applyPrivacyHeaders,
       isTrackerUrl,
     } = require("../extension/background.js");
@@ -64,6 +65,12 @@ console.log("🦊 Running OpenFoxy Basic Sanity Tests...");
     }
     if (!pac.includes("return hit ? proxy : fallback")) {
       throw new Error("Kill switch does not protect include-mode misses.");
+    }
+    if (!unsupportedAuthenticatedSocks5({ ...profile, user: "u", pass: "p" })) {
+      throw new Error("Authenticated SOCKS5 should be marked unsupported for Chrome.");
+    }
+    if (unsupportedAuthenticatedSocks5(profile)) {
+      throw new Error("Unauthenticated SOCKS5 should remain available in Chrome.");
     }
     const config = buildProxyConfig(profile, { killSwitch: true });
     if (config.mode !== "pac_script" || !config.pacScript.data) {
@@ -109,9 +116,9 @@ console.log("🦊 Running OpenFoxy Basic Sanity Tests...");
         headersReceived: null,
       };
       const store = {};
-      const proxyState = { value: null, clearCount: 0 };
+      const proxyState = { value: null, clearCount: 0, failSetMessage: "" };
       const actionState = { iconPath: null };
-      return {
+      const mock = {
         listeners,
         store,
         proxyState,
@@ -143,6 +150,12 @@ console.log("🦊 Running OpenFoxy Basic Sanity Tests...");
         proxy: {
           settings: {
             set({ value }, callback) {
+              if (proxyState.failSetMessage) {
+                mock.runtime.lastError = { message: proxyState.failSetMessage };
+                if (callback) callback();
+                delete mock.runtime.lastError;
+                return;
+              }
               proxyState.value = value;
               if (callback) callback();
             },
@@ -184,6 +197,7 @@ console.log("🦊 Running OpenFoxy Basic Sanity Tests...");
           },
         },
       };
+      return mock;
     })();
 
     global.chrome = chromeMock;
@@ -226,13 +240,31 @@ console.log("🦊 Running OpenFoxy Basic Sanity Tests...");
       throw new Error("Residential profiles should use HTTP proxy mode for browser traffic.");
     }
     const authResult = await new Promise((resolve) => {
-      chromeMock.listeners.auth({ isProxy: true }, resolve);
+      chromeMock.listeners.auth(
+        { isProxy: true, challenger: { host: "127.0.0.1", port: 8083 } },
+        resolve,
+      );
     });
     if (
       authResult.authCredentials?.username !== "res_user" ||
       authResult.authCredentials?.password !== "res_pass"
     ) {
       throw new Error("Extension did not provide proxy credentials on auth challenge.");
+    }
+    const unrelatedAuthResult = await new Promise((resolve) => {
+      chromeMock.listeners.auth(
+        { isProxy: true, challenger: { host: "127.0.0.2", port: 8083 } },
+        resolve,
+      );
+    });
+    if (unrelatedAuthResult.authCredentials) {
+      throw new Error("Extension leaked credentials to an unrelated proxy challenge.");
+    }
+    const directAuthResult = await new Promise((resolve) => {
+      chromeMock.listeners.auth({ isProxy: false }, resolve);
+    });
+    if (directAuthResult.authCredentials) {
+      throw new Error("Extension should not answer origin-server auth with proxy credentials.");
     }
     chromeMock.listeners.beforeRequest({ requestBody: { raw: [{ bytes: Buffer.alloc(10) }] } });
     chromeMock.listeners.headersReceived({
@@ -248,6 +280,60 @@ console.log("🦊 Running OpenFoxy Basic Sanity Tests...");
     const disconnectResult = await sendExtensionMessage({ type: "disconnect" });
     if (!disconnectResult.ok || chromeMock.proxyState.value !== null) {
       throw new Error("Extension disconnect did not clear proxy settings.");
+    }
+    chromeMock.proxyState.value = { mode: "pac_script" };
+    const socksResult = await sendExtensionMessage({
+      type: "connect",
+      profile: {
+        protocol: "socks5",
+        host: "127.0.0.1",
+        port: "1080",
+        user: "socks_user",
+        pass: "socks_pass",
+        activation: "all",
+      },
+      settings: { killSwitch: true },
+    });
+    if (socksResult.ok || !String(socksResult.error || "").includes("cannot authenticate SOCKS5")) {
+      throw new Error("Extension should reject authenticated SOCKS5 profiles in Chrome.");
+    }
+    if (chromeMock.proxyState.value !== null) {
+      throw new Error("Rejected authenticated SOCKS5 should clear proxy settings.");
+    }
+    const socksAuthResult = await new Promise((resolve) => {
+      chromeMock.listeners.auth(
+        { isProxy: true, challenger: { host: "127.0.0.1", port: 1080 } },
+        resolve,
+      );
+    });
+    if (socksAuthResult.authCredentials) {
+      throw new Error(
+        "Rejected authenticated SOCKS5 should leave no proxy auth credentials active.",
+      );
+    }
+    chromeMock.proxyState.value = { mode: "pac_script" };
+    chromeMock.proxyState.failSetMessage = "controlled proxy settings failure";
+    const failedHttpResult = await sendExtensionMessage({
+      type: "connect",
+      profile: {
+        protocol: "http",
+        host: "127.0.0.1",
+        port: "8080",
+        user: "http_user",
+        pass: "http_pass",
+        activation: "all",
+      },
+      settings: { killSwitch: true },
+    });
+    chromeMock.proxyState.failSetMessage = "";
+    if (
+      failedHttpResult.ok ||
+      !String(failedHttpResult.error || "").includes("controlled proxy settings failure")
+    ) {
+      throw new Error("Extension should surface proxy API failures during connect.");
+    }
+    if (chromeMock.proxyState.value !== null) {
+      throw new Error("Failed proxy API connect should clear stale proxy settings.");
     }
     await sendExtensionMessage({ type: "setActionIconTheme", theme: "dark" });
     if (chromeMock.actionState.iconPath?.[16] !== "icons/dark/icon16.png") {

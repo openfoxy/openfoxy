@@ -126,10 +126,7 @@ async function connectExtension(sw, profile) {
     return new Promise((resolve) => chrome.runtime.sendMessage({ type: "connect", profile, settings }, resolve));
   })()`;
   const result = await evaluate(sw, expression);
-  assert(
-    result && result.ok,
-    `Extension connect failed for ${profile.protocol}: ${JSON.stringify(result)}`,
-  );
+  return result;
 }
 
 async function disconnectExtension(sw) {
@@ -254,7 +251,7 @@ async function main() {
       },
       {
         name: "SOCKS5",
-        expectProxy: "SOCKS5 127.0.0.1:11080",
+        expectError: "cannot authenticate SOCKS5",
         profile: {
           name: "SOCKS5 e2e",
           protocol: "socks5",
@@ -285,7 +282,21 @@ async function main() {
     for (const testCase of cases) {
       console.log(`Testing ${testCase.name} profile...`);
       try {
-        await connectExtension(sw, testCase.profile);
+        const connectResult = await connectExtension(sw, testCase.profile);
+        if (testCase.expectError) {
+          assert(
+            connectResult &&
+              !connectResult.ok &&
+              String(connectResult.error || "").includes(testCase.expectError),
+            `${testCase.name} did not return expected error: ${JSON.stringify(connectResult)}.`,
+          );
+          results.push(`${testCase.name}: rejected authenticated profile`);
+          continue;
+        }
+        assert(
+          connectResult && connectResult.ok,
+          `Extension connect failed for ${testCase.profile.protocol}: ${JSON.stringify(connectResult)}`,
+        );
         const config = await proxyConfig(sw);
         assert(config.mode === "pac_script", `${testCase.name} did not install PAC script.`);
         assert(

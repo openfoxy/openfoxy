@@ -20,7 +20,7 @@ Run the real browser-extension proxy test locally after installing Chrome for Te
 npm run test:browser
 ```
 
-`test:browser` starts the browser proxy stack, loads the unpacked extension in Chrome for Testing, and verifies browser traffic through HTTP, SOCKS5, and residential profiles. At the time of writing, authenticated SOCKS5 is a known Chrome extension limitation and is expected to fail until a browser-compatible bridge is added.
+`test:browser` starts the browser proxy stack, loads the unpacked extension in Chrome for Testing, verifies browser traffic through HTTP and residential profiles, and verifies that authenticated SOCKS5 profiles are rejected with a clear Chrome compatibility error. Authenticated SOCKS5 remains supported by OpenFoxy for clients that implement SOCKS5 username/password auth directly.
 
 ## Folder Layout
 

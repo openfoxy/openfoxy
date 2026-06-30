@@ -354,13 +354,13 @@ Removes all proxies, databases, firewall rules, and service files.
 
 The `extension/` folder contains a Chromium MV3 extension for browser-only proxy profiles.
 
-- Routes browser traffic through HTTP, SOCKS5, residential, include/exclude, or PAC profiles.
-- Handles proxy authentication in the background service worker.
+- Routes browser traffic through HTTP, unauthenticated SOCKS5, residential, include/exclude, or PAC profiles.
+- Handles HTTP and residential proxy authentication in the background service worker.
 - Uses declarative rules for tracker blocking and supported request-header changes.
 - Injects lightweight page-level fingerprint masking for navigator, screen, timezone, canvas, audio, WebGL, and selected permission APIs.
 - The kill switch avoids direct fallback in generated PAC rules by routing blocked/failing cases to `127.0.0.1:9`.
 
-Limitations: browser APIs do not provide full VPN-level protection. The extension does not claim OS-wide WebRTC, DNS-over-HTTPS, cookie container, or notification-leak protection.
+Limitations: browser APIs do not provide full VPN-level protection. Chrome also does not expose SOCKS5 username/password authentication to extensions, so authenticated SOCKS5 profiles are rejected; use HTTP, residential, unauthenticated SOCKS5, or a local HTTP-to-SOCKS bridge for browser routing. The extension does not claim OS-wide WebRTC, DNS-over-HTTPS, cookie container, or notification-leak protection.
 
 ---
 

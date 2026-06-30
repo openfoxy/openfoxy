@@ -7,6 +7,7 @@ let stats = { upload: 0, download: 0 };
 let proxyIp = null;
 let authListenerInstalled = false;
 let saveTimer = null;
+let connectionSeq = 0;
 
 const TRACKER_HOSTS = [
   "doubleclick.net",
@@ -23,6 +24,53 @@ const TRACKER_HOSTS = [
   "outbrain.com",
 ];
 const DNR_RULE_IDS = Array.from({ length: TRACKER_HOSTS.length + 8 }, (_, i) => i + 1000);
+const AUTHENTICATED_SOCKS5_ERROR =
+  "Chrome extensions cannot authenticate SOCKS5 proxies. Use an HTTP/residential profile, unauthenticated SOCKS5, or a local HTTP-to-SOCKS bridge.";
+
+function hasProxyCredentials(profile) {
+  return !!(String(profile?.user || "").trim() || String(profile?.pass || "").trim());
+}
+
+function unsupportedAuthenticatedSocks5(profile) {
+  return profile?.protocol === "socks5" && hasProxyCredentials(profile);
+}
+
+function proxyAuthSupported(profile) {
+  return profile?.protocol === "http" || profile?.protocol === "residential";
+}
+
+function normalizeHost(host) {
+  return String(host || "")
+    .trim()
+    .replace(/^\[|\]$/g, "")
+    .toLowerCase();
+}
+
+function proxyChallengeMatches(details, profile) {
+  if (!details?.challenger) return true;
+  const expectedHost = normalizeHost(profile?.host);
+  const challengeHost = normalizeHost(details.challenger.host);
+  const expectedPort = Number(profile?.port);
+  const challengePort = Number(details.challenger.port);
+  return expectedHost === challengeHost && expectedPort === challengePort;
+}
+
+function proxyAuthCredentialsFor(details) {
+  if (
+    !details?.isProxy ||
+    !connected ||
+    !activeProfile ||
+    !proxyAuthSupported(activeProfile) ||
+    !hasProxyCredentials(activeProfile) ||
+    !proxyChallengeMatches(details, activeProfile)
+  ) {
+    return null;
+  }
+  return {
+    username: String(activeProfile.user || "").trim(),
+    password: String(activeProfile.pass || ""),
+  };
+}
 
 function normalizeProtocol(protocol) {
   return protocol === "socks5" ? "SOCKS5" : "PROXY";
@@ -108,14 +156,19 @@ async function updateActionIcon(theme) {
 }
 
 async function refreshProxyIp() {
+  const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
+  const timeout = controller ? setTimeout(() => controller.abort(), 8000) : null;
   try {
     const response = await fetch(`https://icanhazip.com/?openfoxy=${Date.now()}`, {
       cache: "no-store",
+      signal: controller?.signal,
     });
     const text = (await response.text()).trim();
     proxyIp = /^\d{1,3}(?:\.\d{1,3}){3}$/.test(text) ? text : null;
   } catch {
     proxyIp = null;
+  } finally {
+    if (timeout) clearTimeout(timeout);
   }
   scheduleStatsSave();
   return proxyIp;
@@ -259,10 +312,9 @@ function installAuthHandler() {
   if (authListenerInstalled || typeof chrome === "undefined") return;
   chrome.webRequest.onAuthRequired.addListener(
     (details, callback) => {
-      if (details.isProxy && connected && activeProfile?.user) {
-        callback({
-          authCredentials: { username: activeProfile.user, password: activeProfile.pass || "" },
-        });
+      const authCredentials = proxyAuthCredentialsFor(details);
+      if (authCredentials) {
+        callback({ authCredentials });
         return;
       }
       callback({ cancel: false });
@@ -277,43 +329,76 @@ function scheduleStatsSave() {
   if (saveTimer || typeof chrome === "undefined") return;
   saveTimer = setTimeout(async () => {
     saveTimer = null;
-    const data = await chrome.storage.local.get(STORE_KEY);
-    const store = data[STORE_KEY] || {};
-    await chrome.storage.local.set({ [STORE_KEY]: { ...store, connected, stats, proxyIp } });
+    try {
+      const data = await chrome.storage.local.get(STORE_KEY);
+      const store = data[STORE_KEY] || {};
+      await chrome.storage.local.set({ [STORE_KEY]: { ...store, connected, stats, proxyIp } });
+    } catch (error) {
+      console.warn("OpenFoxy failed to persist state", error);
+    }
   }, 500);
 }
 
 function setProxyConfig(config) {
-  return new Promise((resolve) =>
-    chrome.proxy.settings.set({ scope: "regular", value: config }, resolve),
-  );
+  return new Promise((resolve, reject) => {
+    chrome.proxy.settings.set({ scope: "regular", value: config }, () => {
+      const error = chrome.runtime?.lastError;
+      if (error) reject(new Error(error.message));
+      else resolve();
+    });
+  });
 }
 
 function clearProxyConfig() {
-  return new Promise((resolve) => chrome.proxy.settings.clear({ scope: "regular" }, resolve));
+  return new Promise((resolve, reject) => {
+    chrome.proxy.settings.clear({ scope: "regular" }, () => {
+      const error = chrome.runtime?.lastError;
+      if (error) reject(new Error(error.message));
+      else resolve();
+    });
+  });
 }
 
-async function connectProfile(profile, settings = {}) {
-  activeProfile = profile;
-  activeSettings = settings;
-  stats = { upload: 0, download: 0 };
-  installAuthHandler();
-  await setProxyConfig(buildProxyConfig(profile, settings));
-  await updateDeclarativeRules(profile, settings);
-  connected = true;
-  proxyIp = null;
-  scheduleStatsSave();
-  return { ok: true, proxyIp: await refreshProxyIp() };
-}
-
-async function disconnectProfile() {
+async function resetConnectionState() {
   activeProfile = null;
+  activeSettings = {};
   connected = false;
   stats = { upload: 0, download: 0 };
   proxyIp = null;
   await clearProxyConfig();
   await updateDeclarativeRules(null, {});
   scheduleStatsSave();
+}
+
+async function connectProfile(profile, settings = {}) {
+  const seq = ++connectionSeq;
+  if (unsupportedAuthenticatedSocks5(profile)) {
+    await resetConnectionState();
+    return { ok: false, error: AUTHENTICATED_SOCKS5_ERROR };
+  }
+  try {
+    stats = { upload: 0, download: 0 };
+    proxyIp = null;
+    installAuthHandler();
+    await setProxyConfig(buildProxyConfig(profile, settings));
+    await updateDeclarativeRules(profile, settings);
+    if (seq !== connectionSeq) return { ok: false, error: "connection superseded" };
+    activeProfile = profile;
+    activeSettings = settings;
+    connected = true;
+    scheduleStatsSave();
+    const refreshedIp = await refreshProxyIp();
+    if (seq !== connectionSeq) return { ok: false, error: "connection superseded" };
+    return { ok: true, proxyIp: refreshedIp };
+  } catch (error) {
+    if (seq === connectionSeq) await resetConnectionState();
+    return { ok: false, error: error.message || "failed to configure proxy" };
+  }
+}
+
+async function disconnectProfile() {
+  connectionSeq++;
+  await resetConnectionState();
   return { ok: true };
 }
 
@@ -406,6 +491,7 @@ if (typeof module !== "undefined") {
     buildPacScript,
     buildProxyConfig,
     proxyAddress,
+    unsupportedAuthenticatedSocks5,
     applyPrivacyHeaders,
     isTrackerUrl,
   };

@@ -180,6 +180,7 @@ const state = {
   activeId: null,
   connected: false,
   connecting: false,
+  connectionError: "",
   stats: { upload: 0, download: 0 },
   proxyIp: null,
   actionIconTheme: "light",
@@ -240,6 +241,7 @@ async function saveStore(patch = {}) {
       profiles: state.profiles,
       activeId: state.activeId,
       connected: state.connected,
+      connectionError: state.connectionError,
       stats: state.stats,
       proxyIp: state.proxyIp,
       actionIconTheme: state.actionIconTheme,
@@ -335,7 +337,7 @@ function setConnectionUi(status) {
       state.proxyIp ? `Exit IP ${state.proxyIp}` : "Checking exit IP…",
       "Online",
     ],
-    error: ["Connection failed", "Tap to retry", "Error"],
+    error: ["Connection failed", state.connectionError || "Tap to retry", "Error"],
   };
   $("app").dataset.state = status;
   $("homeStatusValue").textContent = map[status][0];
@@ -581,11 +583,17 @@ async function toggleConnection() {
   if (!profile) return navigate("profiles");
   if (state.connected) {
     await sendMessage({ type: "disconnect" });
-    await saveStore({ connected: false, stats: { upload: 0, download: 0 }, proxyIp: null });
+    await saveStore({
+      connected: false,
+      connectionError: "",
+      stats: { upload: 0, download: 0 },
+      proxyIp: null,
+    });
     renderHome();
     return;
   }
   state.connecting = true;
+  state.connectionError = "";
   renderHome();
   const response = await sendMessage({
     type: "connect",
@@ -596,13 +604,19 @@ async function toggleConnection() {
   if (response.ok) {
     await saveStore({
       connected: true,
+      connectionError: "",
       stats: { upload: 0, download: 0 },
       proxyIp: response.proxyIp || null,
     });
     startStatsPolling();
   } else {
+    state.connectionError = response.error || "Tap to retry";
+    await saveStore({ connected: false, connectionError: state.connectionError });
     setConnectionUi("error");
-    setTimeout(renderHome, 1400);
+    setTimeout(() => {
+      state.connectionError = "";
+      renderHome();
+    }, 3200);
   }
   renderHome();
 }

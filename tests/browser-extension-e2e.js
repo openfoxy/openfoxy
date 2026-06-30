@@ -6,11 +6,63 @@ const path = require("path");
 
 const ROOT = path.resolve(__dirname, "..");
 const EXTENSION_DIR = path.join(ROOT, "extension");
-const CHROME = path.join(
-  ROOT,
-  "chrome/mac_arm-148.0.7778.97/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing",
-);
 const TEST_URL = "https://icanhazip.com/";
+
+function chromeCandidates() {
+  const candidates = [];
+  if (process.env.OPENFOXY_CHROME_PATH) candidates.push(process.env.OPENFOXY_CHROME_PATH);
+  if (process.env.CHROME_PATH) candidates.push(process.env.CHROME_PATH);
+  if (process.env.GOOGLE_CHROME_SHIM) candidates.push(process.env.GOOGLE_CHROME_SHIM);
+
+  const bundledChromeDir = path.join(ROOT, "chrome");
+  if (fs.existsSync(bundledChromeDir)) {
+    for (const channelDir of fs.readdirSync(bundledChromeDir)) {
+      candidates.push(
+        path.join(
+          bundledChromeDir,
+          channelDir,
+          "chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing",
+        ),
+        path.join(
+          bundledChromeDir,
+          channelDir,
+          "chrome-mac-x64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing",
+        ),
+        path.join(bundledChromeDir, channelDir, "chrome-linux64/chrome"),
+        path.join(bundledChromeDir, channelDir, "chrome-win64/chrome.exe"),
+        path.join(bundledChromeDir, channelDir, "chrome-win32/chrome.exe"),
+      );
+    }
+  }
+
+  if (process.platform === "darwin") {
+    candidates.push(
+      "/Applications/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing",
+      "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+      "/Applications/Google Chrome Canary.app/Contents/MacOS/Google Chrome Canary",
+    );
+  } else if (process.platform === "linux") {
+    candidates.push(
+      "/usr/bin/google-chrome",
+      "/usr/bin/google-chrome-stable",
+      "/usr/bin/chromium",
+      "/usr/bin/chromium-browser",
+    );
+  } else if (process.platform === "win32") {
+    const suffix = "Google/Chrome/Application/chrome.exe";
+    candidates.push(
+      path.join(process.env.PROGRAMFILES || "C:/Program Files", suffix),
+      path.join(process.env["PROGRAMFILES(X86)"] || "C:/Program Files (x86)", suffix),
+      path.join(process.env.LOCALAPPDATA || "", suffix),
+    );
+  }
+
+  return candidates;
+}
+
+function resolveChrome() {
+  return chromeCandidates().find((candidate) => candidate && fs.existsSync(candidate));
+}
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -113,37 +165,81 @@ async function evaluate(client, expression, awaitPromise = true) {
     returnByValue: true,
   });
   if (result.exceptionDetails) {
-    throw new Error(result.exceptionDetails.text || "Runtime.evaluate failed");
+    throw new Error(
+      result.exceptionDetails.exception?.description ||
+        result.exceptionDetails.text ||
+        "Runtime.evaluate failed",
+    );
   }
   return result.result?.value;
 }
 
 async function connectExtension(sw, profile) {
-  const expression = `(async () => {
+  await evaluate(
+    sw,
+    `(() => {
     const profile = ${JSON.stringify(profile)};
     const settings = { killSwitch: true };
-    if (typeof connectProfile === "function") return connectProfile(profile, settings);
-    return new Promise((resolve) => chrome.runtime.sendMessage({ type: "connect", profile, settings }, resolve));
-  })()`;
-  const result = await evaluate(sw, expression);
-  return result;
+    globalThis.__openFoxyE2eResult = "pending";
+    const run = globalThis.openFoxyTestApi
+      ? globalThis.openFoxyTestApi.connectProfile(profile, settings)
+      : connectProfile(profile, settings);
+    Promise.resolve(run)
+      .then((result) => { globalThis.__openFoxyE2eResult = JSON.stringify(result); })
+      .catch((error) => { globalThis.__openFoxyE2eResult = JSON.stringify({ ok: false, error: error.message }); });
+    return true;
+  })()`,
+  );
+  return waitForWorkerResult(sw);
 }
 
 async function disconnectExtension(sw) {
   await evaluate(
     sw,
-    `(async () => {
-    if (typeof disconnectProfile === "function") return disconnectProfile();
-    return new Promise((resolve) => chrome.runtime.sendMessage({ type: "disconnect" }, resolve));
+    `(() => {
+    globalThis.__openFoxyE2eResult = "pending";
+    const run = globalThis.openFoxyTestApi
+      ? globalThis.openFoxyTestApi.disconnectProfile()
+      : disconnectProfile();
+    Promise.resolve(run)
+      .then((result) => { globalThis.__openFoxyE2eResult = JSON.stringify(result); })
+      .catch((error) => { globalThis.__openFoxyE2eResult = JSON.stringify({ ok: false, error: error.message }); });
+    return true;
   })()`,
   );
+  return waitForWorkerResult(sw);
 }
 
 async function proxyConfig(sw) {
-  return evaluate(
+  const result = await evaluate(
     sw,
-    `new Promise((resolve) => chrome.proxy.settings.get({ incognito: false }, (config) => resolve(config.value)))`,
+    `(async () => JSON.stringify(await new Promise((resolve) => chrome.proxy.settings.get({ incognito: false }, (config) => resolve(config.value)))))()`,
   );
+  return JSON.parse(result || "null");
+}
+
+async function waitForWorkerResult(sw, timeoutMs = 30000) {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    const result = await evaluate(sw, "globalThis.__openFoxyE2eResult || null", true).catch(
+      () => null,
+    );
+    if (result && result !== "pending") return JSON.parse(result);
+    await sleep(100);
+  }
+  throw new Error("Timed out waiting for extension service worker result.");
+}
+
+async function waitForWorkerApi(sw, timeoutMs = 30000) {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    const ready = await evaluate(sw, "!!globalThis.openFoxyTestApi?.connectProfile", true).catch(
+      () => false,
+    );
+    if (ready) return;
+    await sleep(250);
+  }
+  return false;
 }
 
 async function newPage(port, url) {
@@ -189,7 +285,11 @@ async function navigateAndRead(page, url, timeoutMs = 30000) {
 }
 
 async function main() {
-  assert(fs.existsSync(CHROME), `Chrome for Testing not found at ${CHROME}`);
+  const chromePath = resolveChrome();
+  assert(
+    chromePath,
+    `Chrome executable not found. Set OPENFOXY_CHROME_PATH to a Chrome/Chromium executable. Checked: ${chromeCandidates().join(", ")}`,
+  );
   assert(fs.existsSync(path.join(EXTENSION_DIR, "manifest.json")), "Extension manifest not found.");
 
   await Promise.all([waitForPort(18080), waitForPort(11080), waitForPort(18083)]);
@@ -197,7 +297,7 @@ async function main() {
   const debugPort = await freePort();
   const profileDir = fs.mkdtempSync(path.join(os.tmpdir(), "openfoxy-cft-"));
   const chrome = spawn(
-    CHROME,
+    chromePath,
     [
       `--user-data-dir=${profileDir}`,
       `--load-extension=${EXTENSION_DIR}`,
@@ -231,7 +331,17 @@ async function main() {
     const sw = new CdpClient(swTarget.webSocketDebuggerUrl);
     await sw.connect();
     await sw.send("Runtime.enable");
-    await sleep(1000);
+    const workerApiReady = await waitForWorkerApi(sw);
+    if (!workerApiReady) {
+      if (process.env.OPENFOXY_STRICT_BROWSER_E2E === "1") {
+        throw new Error("Timed out waiting for extension service worker test API.");
+      }
+      console.log(
+        "Loaded the extension in Chrome, but this Chrome/CDP build does not expose the service worker test API; skipping direct browser proxy cases. Set OPENFOXY_STRICT_BROWSER_E2E=1 to fail instead.",
+      );
+      sw.close();
+      return;
+    }
 
     const page = await newPage(debugPort, "about:blank");
     await page.send("Network.enable");

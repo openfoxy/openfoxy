@@ -1,4 +1,5 @@
 const { execSync } = require("child_process");
+const fs = require("fs");
 
 console.log("🦊 Running OpenFoxy Basic Sanity Tests...");
 
@@ -378,6 +379,30 @@ console.log("🦊 Running OpenFoxy Basic Sanity Tests...");
       }
     }
     console.log("✅ CLI strict port validation verified.");
+
+    // Test 7: Documented extension settings and security-sensitive implementation details are real.
+    const pageSource = fs.readFileSync("extension/page.js", "utf8");
+    if (
+      !pageSource.includes("function spoofFonts") ||
+      !pageSource.includes("settings.fontMask") ||
+      !pageSource.includes("FontFaceSet.prototype") ||
+      !pageSource.includes("CanvasRenderingContext2D.prototype.measureText")
+    ) {
+      throw new Error("fontMask setting is documented in the UI but not implemented in page.js.");
+    }
+    const popupSource = fs.readFileSync("extension/popup.html", "utf8");
+    if (/No .* implemented yet|Notifications<\/span>/.test(popupSource)) {
+      throw new Error("Popup contains placeholder or undocumented notification controls.");
+    }
+    const cliSource = fs.readFileSync("index.js", "utf8");
+    if (/const ipTokens|223469161b4d4b|11d71a12a4c8ac|cf2feb5555f627/.test(cliSource)) {
+      throw new Error("CLI contains hardcoded third-party IP geolocation tokens.");
+    }
+    const manifest = require("../extension/manifest.json");
+    if (manifest.permissions.includes("tabs")) {
+      throw new Error("Extension requests unused tabs permission.");
+    }
+    console.log("✅ Implementation completeness and permission hygiene verified.");
 
     console.log("\n🎉 Basic tests passed! Run GitHub Actions for full Functional Testing.");
   } catch (error) {

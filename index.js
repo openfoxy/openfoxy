@@ -83,7 +83,7 @@ function printHelp() {
   console.log();
   console.log("Docker:");
   console.log(
-    "  docker run -d -p <port>:<port> ghcr.io/maxylev/openfoxy:latest <user> <pass> <port> [protocol]",
+    "  docker run -d -p <port>:<port> ghcr.io/openfoxy/openfoxy:latest <user> <pass> <port> [protocol]",
   );
   console.log();
 }
@@ -282,31 +282,66 @@ async function getPublicIp() {
   return "YOUR_SERVER_IP";
 }
 
-const ipTokens = [
-  "223469161b4d4b",
-  "11d71a12a4c8ac",
-  "cf2feb5555f627",
-  "cf4c724a75a7ee",
-  "4adfcc46c95c4a",
-  "416c3b42e5cc10",
-];
-function getIpInfo(ip) {
-  const token = ipTokens[Math.floor(Math.random() * ipTokens.length)];
+function httpsJson(url, timeoutMs = 3000) {
   return new Promise((resolve) => {
-    https
-      .get(`https://api.ipinfo.io/lite/${ip}?token=${token}`, { timeout: 3000 }, (res) => {
-        let data = "";
-        res.on("data", (c) => (data += c));
-        res.on("end", () => {
-          try {
-            resolve(JSON.parse(data));
-          } catch (e) {
-            resolve({});
-          }
-        });
-      })
-      .on("error", () => resolve({}));
+    const req = https.get(url, { timeout: timeoutMs }, (res) => {
+      let data = "";
+      res.on("data", (chunk) => (data += chunk));
+      res.on("end", () => {
+        if (res.statusCode && res.statusCode >= 400) return resolve({});
+        try {
+          resolve(JSON.parse(data));
+        } catch (e) {
+          resolve({});
+        }
+      });
+    });
+    req.on("error", () => resolve({}));
+    req.on("timeout", () => {
+      req.destroy();
+      resolve({});
+    });
   });
+}
+
+function configuredIpInfoTokens() {
+  return String(process.env.OPENFOXY_IPINFO_TOKEN || process.env.IPINFO_TOKEN || "")
+    .split(",")
+    .map((token) => token.trim())
+    .filter(Boolean);
+}
+
+async function getIpInfo(ip) {
+  const safeIp = encodeURIComponent(String(ip || "").trim());
+  if (!safeIp) return {};
+
+  for (const token of configuredIpInfoTokens()) {
+    const data = await httpsJson(
+      `https://api.ipinfo.io/lite/${safeIp}?token=${encodeURIComponent(token)}`,
+    );
+    if (data.country_code || data.country) {
+      return { ...data, country_code: data.country_code || data.country };
+    }
+  }
+
+  const publicProviders = [
+    {
+      url: `https://ipapi.co/${safeIp}/json/`,
+      country: (data) => data.country_code || data.country,
+    },
+    {
+      url: `https://ipwho.is/${safeIp}`,
+      country: (data) => (data.success === false ? null : data.country_code),
+    },
+  ];
+
+  for (const provider of publicProviders) {
+    const data = await httpsJson(provider.url);
+    const country = provider.country(data);
+    if (country) return { ...data, country_code: String(country).toUpperCase() };
+  }
+
+  return {};
 }
 
 // -----------------------------------------------------------------
@@ -998,6 +1033,13 @@ function runProviderClient(host, port, token, quiet) {
   const osInfo = detectOS();
 
   try {
+    if (requiresRoot.includes(command) && !osInfo) {
+      console.error(
+        "\n❌ Error: OpenFoxy host management commands require a supported Linux distribution (Alpine, Debian/Ubuntu, or RHEL-compatible).\n",
+      );
+      process.exit(1);
+    }
+
     switch (command) {
       case "serve-master":
         serveResidentialMaster(parseInt(args[0]) || 9000);

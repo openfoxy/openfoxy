@@ -1,15 +1,14 @@
 {
   "manifest_version": 3,
   "name": "OpenFoxy",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Profile-based proxy routing for HTTP, SOCKS5, and residential proxies.",
   "permissions": [
     "proxy",
     "storage",
     "webRequest",
     "webRequestAuthProvider",
-    "declarativeNetRequest",
-    "tabs"
+    "declarativeNetRequest"
   ],
   "host_permissions": ["<all_urls>"],
   "background": {

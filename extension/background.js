@@ -429,6 +429,14 @@ async function reapplyStoredState() {
   return profile ? connectProfile(profile, store.settings || {}) : disconnectProfile();
 }
 
+if (typeof globalThis !== "undefined") {
+  globalThis.openFoxyTestApi = {
+    connectProfile,
+    disconnectProfile,
+    proxyState: () => ({ connected, profile: activeProfile, stats, proxyIp }),
+  };
+}
+
 if (typeof chrome !== "undefined" && chrome.runtime?.onMessage) {
   chrome.runtime.onInstalled?.addListener(() => restoreState());
   chrome.runtime.onStartup?.addListener(() => restoreState());

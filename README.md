@@ -1,9 +1,9 @@
 # 🦊 OpenFoxy
 
-<p align="center"><img src="https://raw.githubusercontent.com/maxylev/openfoxy/refs/heads/main/assets/openfoxy-preview.svg" alt="OpenFoxy"></p>
+<p align="center"><img src="https://raw.githubusercontent.com/openfoxy/openfoxy/refs/heads/main/assets/openfoxy-preview.svg" alt="OpenFoxy"></p>
 
 [![NPM Version](https://img.shields.io/npm/v/openfoxy?style=flat-square&color=cb3837)](https://www.npmjs.com/package/openfoxy)
-[![Tests](https://img.shields.io/github/actions/workflow/status/maxylev/openfoxy/test.yml?label=Tests&style=flat-square)](https://github.com/maxylev/openfoxy/actions)
+[![Tests](https://img.shields.io/github/actions/workflow/status/openfoxy/openfoxy/test.yml?label=Tests&style=flat-square)](https://github.com/openfoxy/openfoxy/actions)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](https://opensource.org/licenses/MIT)
 
 **A dependency-free Node.js CLI for VPS proxy management, plus a Chromium browser extension for profile-based proxy routing.**
@@ -17,7 +17,7 @@ The npm package itself has no JavaScript dependencies. On Linux hosts it install
 - **4 Protocols Supported Native:** HTTP, SOCKS5, MTProto, and Custom Residential.
 - **Lightweight Analytics:** Uses kernel `iptables` counters for system proxies and app-level counters for residential relay traffic.
 - **Create Your Own Residential Network:** Link home computers to your VPS and route consumer traffic strictly through designated geographic locations.
-- **Hot-Reloading:** Change passwords and add new proxies without disconnecting currently active users.
+- **Safe Reloading:** Add new proxies without interrupting active users; HTTP and residential password/limit changes reload live, while SOCKS5 password changes require a Dante service restart.
 - **Provider Management:** Blacklist, whitelist, and auto-penalize misbehaving residential providers.
 - **Dual-Protocol Consumers:** Residential proxies accept SOCKS5 and HTTP proxy traffic on the same port.
 - **Instant Output:** Formats proxies beautifully into `user:pass@ip:port` for immediate copy-pasting.
@@ -60,7 +60,7 @@ npx openfoxy add myuser mypass 8000 http
    🌐 Ready to use: myuser:mypass@203.0.113.50:8000
 ```
 
-<p align="center"><img src="https://raw.githubusercontent.com/maxylev/openfoxy/refs/heads/main/assets/openfoxy-http.svg" alt="HTTP Proxy Architecture"></p>
+<p align="center"><img src="https://raw.githubusercontent.com/openfoxy/openfoxy/refs/heads/main/assets/openfoxy-http.svg" alt="HTTP Proxy Architecture"></p>
 
 ### SOCKS5 (Dante)
 
@@ -76,7 +76,7 @@ npx openfoxy add myuser mypass 8001 socks5
    🌐 Ready to use: myuser:mypass@203.0.113.50:8001
 ```
 
-<p align="center"><img src="https://raw.githubusercontent.com/maxylev/openfoxy/refs/heads/main/assets/openfoxy-socks5.svg" alt="SOCKS5 Proxy Architecture"></p>
+<p align="center"><img src="https://raw.githubusercontent.com/openfoxy/openfoxy/refs/heads/main/assets/openfoxy-socks5.svg" alt="SOCKS5 Proxy Architecture"></p>
 
 ### MTProto (Telegram)
 
@@ -92,7 +92,7 @@ npx openfoxy add myuser skip 8002 mtproto
    🌐 TG Link: tg://proxy?server=203.0.113.50&port=8002&secret=ee...bHM
 ```
 
-<p align="center"><img src="https://raw.githubusercontent.com/maxylev/openfoxy/refs/heads/main/assets/openfoxy-mtproto.svg" alt="MTProto Proxy Architecture"></p>
+<p align="center"><img src="https://raw.githubusercontent.com/openfoxy/openfoxy/refs/heads/main/assets/openfoxy-mtproto.svg" alt="MTProto Proxy Architecture"></p>
 
 ### Residential (Distributed Relay)
 
@@ -119,7 +119,7 @@ npx openfoxy add res_user res_pass 8003 residential --gateway=5000
 # → Provider: npx openfoxy provider 203.0.113.50:5000:PROVIDER_TOKEN
 ```
 
-<p align="center"><img src="https://raw.githubusercontent.com/maxylev/openfoxy/refs/heads/main/assets/openfoxy-residential.svg" alt="Residential Proxy Architecture"></p>
+<p align="center"><img src="https://raw.githubusercontent.com/openfoxy/openfoxy/refs/heads/main/assets/openfoxy-residential.svg" alt="Residential Proxy Architecture"></p>
 
 ---
 
@@ -280,7 +280,7 @@ npx openfoxy status
 ═════════════════════════════════════════════════════════
 ```
 
-### `change` — Hot-Reload Settings
+### `change` — Reload Settings
 
 ```bash
 npx openfoxy change myuser newsecret456
@@ -290,9 +290,9 @@ npx openfoxy change myuser newsecret456
 ✅ Updated 'myuser': password.
 ```
 
-Live-updates the password across all protocols for that user without dropping active connections.
+Updates credentials for all proxies owned by that user. HTTP credentials are reloaded with Squid reconfiguration, and residential credential, limit, and country changes are picked up by the master process on its next sync cycle. SOCKS5 credentials are backed by local system users, so Dante is restarted after password changes and existing SOCKS5 connections may be interrupted.
 
-For residential proxies, you can also hot-reload the data limit and country filter:
+For residential proxies, you can also reload the data limit and country filter:
 
 ```bash
 npx openfoxy change res_user --limit=5GB
@@ -357,7 +357,7 @@ The `extension/` folder contains a Chromium MV3 extension for browser-only proxy
 - Routes browser traffic through HTTP, unauthenticated SOCKS5, residential, include/exclude, or PAC profiles.
 - Handles HTTP and residential proxy authentication in the background service worker.
 - Uses declarative rules for tracker blocking and supported request-header changes.
-- Injects lightweight page-level fingerprint masking for navigator, screen, timezone, canvas, audio, WebGL, and selected permission APIs.
+- Injects lightweight page-level fingerprint masking for navigator, screen, timezone, canvas, audio, WebGL, font probing, and selected permission APIs.
 - The kill switch avoids direct fallback in generated PAC rules by routing blocked/failing cases to `127.0.0.1:9`.
 
 Limitations: browser APIs do not provide full VPN-level protection. Chrome also does not expose SOCKS5 username/password authentication to extensions, so authenticated SOCKS5 profiles are rejected; use HTTP, residential, unauthenticated SOCKS5, or a local HTTP-to-SOCKS bridge for browser routing. The extension does not claim OS-wide WebRTC, DNS-over-HTTPS, cookie container, or notification-leak protection.
@@ -371,7 +371,7 @@ If you prefer containers, OpenFoxy has an optimized Alpine-based Docker image av
 ### HTTP Proxy
 
 ```bash
-docker run -d -p 8000:8000 --name http-proxy ghcr.io/maxylev/openfoxy:latest myuser mypass 8000 http
+docker run -d -p 8000:8000 --name http-proxy ghcr.io/openfoxy/openfoxy:latest myuser mypass 8000 http
 ```
 
 Use: `curl -x http://myuser:mypass@<VPS_IP>:8000 https://example.com`
@@ -379,7 +379,7 @@ Use: `curl -x http://myuser:mypass@<VPS_IP>:8000 https://example.com`
 ### SOCKS5 Proxy
 
 ```bash
-docker run -d -p 8001:8001 --name socks-proxy ghcr.io/maxylev/openfoxy:latest myuser mypass 8001 socks5
+docker run -d -p 8001:8001 --name socks-proxy ghcr.io/openfoxy/openfoxy:latest myuser mypass 8001 socks5
 ```
 
 Use: `curl --socks5-hostname myuser:mypass@<VPS_IP>:8001 https://example.com`
@@ -387,7 +387,7 @@ Use: `curl --socks5-hostname myuser:mypass@<VPS_IP>:8001 https://example.com`
 ### MTProto Proxy (Telegram)
 
 ```bash
-docker run -d -p 8002:8002 --name mtproto-proxy ghcr.io/maxylev/openfoxy:latest myuser mtpass 8002 mtproto
+docker run -d -p 8002:8002 --name mtproto-proxy ghcr.io/openfoxy/openfoxy:latest myuser mtpass 8002 mtproto
 ```
 
 The generated `tg://proxy?...` link appears in the container logs: `docker logs mtproto-proxy`
@@ -407,7 +407,7 @@ docker run -d \
   -p 8003:8003 \
   -p 9000:9000 \
   --name residential-proxy \
-  ghcr.io/maxylev/openfoxy:latest \
+  ghcr.io/openfoxy/openfoxy:latest \
   res_user res_pass 8003 residential --country=US --limit=2GB
 
 # Custom gateway port (5000)
@@ -415,7 +415,7 @@ docker run -d \
   -p 8003:8003 \
   -p 5000:5000 \
   --name residential-proxy \
-  ghcr.io/maxylev/openfoxy:latest \
+  ghcr.io/openfoxy/openfoxy:latest \
   res_user res_pass 8003 residential --country=US --gateway=5000
 ```
 
@@ -484,6 +484,12 @@ Run the separate two-container residential simulation:
 
 ```bash
 npm run test:e2e:residential
+```
+
+Run the Chromium extension E2E suite against an installed Chrome/Chromium binary. If Chrome is not installed in a standard location, set `OPENFOXY_CHROME_PATH` to the executable path:
+
+```bash
+OPENFOXY_CHROME_PATH="/path/to/chrome" npm run test:browser
 ```
 
 The suite spins up a **Server** container (runs all proxy services) and a **Provider** container (simulates a Home PC exit node), then runs a comprehensive test battery covering every CLI command and network flow.

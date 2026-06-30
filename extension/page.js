@@ -176,6 +176,72 @@
     });
   }
 
+  function fontFamilyList(font) {
+    return String(font || "")
+      .split(",")
+      .map((family) => family.replace(/["']/g, "").trim().toLowerCase())
+      .filter(Boolean);
+  }
+
+  function commonFontSet(profile) {
+    const shared = [
+      "arial",
+      "courier new",
+      "georgia",
+      "times new roman",
+      "trebuchet ms",
+      "verdana",
+      "serif",
+      "sans-serif",
+      "monospace",
+      "cursive",
+      "fantasy",
+      "system-ui",
+      "emoji",
+      "math",
+      "fangsong",
+    ];
+    const platform = String(profile.platform || "").toLowerCase();
+    const platformFonts = platform.includes("mac")
+      ? ["helvetica", "helvetica neue", "menlo", "monaco", "apple color emoji"]
+      : platform.includes("linux")
+        ? ["noto sans", "noto serif", "noto color emoji", "liberation sans", "liberation serif"]
+        : ["segoe ui", "consolas", "calibri", "cambria", "tahoma", "microsoft sans serif"];
+    return new Set([...shared, ...platformFonts]);
+  }
+
+  function fontIsAllowed(font, allowedFonts) {
+    const families = fontFamilyList(font);
+    return families.length === 0 || families.some((family) => allowedFonts.has(family));
+  }
+
+  function spoofFonts(profile, settings) {
+    if (!settings.fontMask || applied.has("fonts")) return;
+    applied.add("fonts");
+    const allowedFonts = commonFontSet(profile);
+
+    if (typeof CanvasRenderingContext2D !== "undefined") {
+      const measureText = CanvasRenderingContext2D.prototype.measureText;
+      method(CanvasRenderingContext2D.prototype, "measureText", function (...args) {
+        const originalFont = this.font;
+        if (!fontIsAllowed(originalFont, allowedFonts)) this.font = "16px Arial, sans-serif";
+        try {
+          return measureText.apply(this, args);
+        } finally {
+          if (this.font !== originalFont) this.font = originalFont;
+        }
+      });
+    }
+
+    if (typeof FontFaceSet !== "undefined" && document.fonts) {
+      const check = FontFaceSet.prototype.check;
+      method(FontFaceSet.prototype, "check", function (font, text) {
+        if (!fontIsAllowed(font, allowedFonts)) return false;
+        return check.call(this, font, text);
+      });
+    }
+  }
+
   function spoofHardwareApis(profile, settings) {
     if (settings.batteryMask && navigator.getBattery) {
       method(Navigator.prototype, "getBattery", () =>
@@ -251,6 +317,7 @@
     spoofCanvas(settings);
     spoofWebGL(settings);
     spoofAudio(settings);
+    spoofFonts(profile, settings);
     spoofHardwareApis(profile, settings);
     spoofPermissions(settings);
     spoofMisc(settings);

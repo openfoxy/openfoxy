@@ -3,7 +3,7 @@
 <p align="center"><img src="https://raw.githubusercontent.com/openfoxy/openfoxy/refs/heads/main/assets/openfoxy-preview.svg" alt="OpenFoxy"></p>
 
 [![NPM Version](https://img.shields.io/npm/v/openfoxy?style=flat-square&color=cb3837)](https://www.npmjs.com/package/openfoxy)
-[![Tests](https://img.shields.io/github/actions/workflow/status/openfoxy/openfoxy/test.yml?label=Tests&style=flat-square)](https://github.com/openfoxy/openfoxy/actions)
+[![CI](https://img.shields.io/github/actions/workflow/status/openfoxy/openfoxy/ci.yml?branch=main&label=CI&style=flat-square)](https://github.com/openfoxy/openfoxy/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](https://opensource.org/licenses/MIT)
 
 **A dependency-free Node.js CLI that turns a Linux server into an HTTP, SOCKS5, MTProto, or residential proxy, plus a Chromium extension for profile-based browser routing.**

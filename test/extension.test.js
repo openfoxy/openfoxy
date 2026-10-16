@@ -636,7 +636,13 @@ test("popup init does not notify the worker or write storage", async () => {
 test("manifest declares page.js in the MAIN world and exposes no resources", () => {
   const manifest = JSON.parse(readExtensionFile("manifest.json"));
   assert.equal(manifest.manifest_version, 3);
-  assert.equal(manifest.version, "2.0.0");
+  const pkg = JSON.parse(fs.readFileSync(path.join(EXTENSION_DIR, "../package.json"), "utf8"));
+  // Chrome versions are dotted numbers only, so compare against the release core.
+  assert.equal(
+    manifest.version,
+    pkg.version.split("-")[0],
+    "extension version tracks package.json",
+  );
   assert.ok(!manifest.permissions.includes("tabs"), "unused tabs permission");
   assert.equal(manifest.web_accessible_resources, undefined);
   assert.ok(Number(manifest.minimum_chrome_version) >= 111);

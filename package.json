@@ -1,6 +1,6 @@
 {
   "name": "openfoxy",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "Self-hosted HTTP, SOCKS5, MTProto, and residential proxy manager for Linux servers",
   "type": "module",
   "bin": {

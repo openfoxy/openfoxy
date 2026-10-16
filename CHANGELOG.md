@@ -1,5 +1,18 @@
 # Changelog
 
+## 2.0.1
+
+First published 2.x release: 2.0.0 was tagged but never published to npm or GHCR, so this
+release ships all of the 2.0.0 changes below. Upgrading from 1.x still requires the 2.0.0 steps.
+
+### Changed
+
+- Releases are automated: pushing a `vX.Y.Z` tag verifies versions, runs the full CI, publishes
+  to npm (with provenance) and GHCR, and creates the GitHub Release with the extension archive.
+- Docker images are tagged `X.Y.Z`, `X.Y`, `X`, and `latest`; `edge` and `sha-<commit>` track `main`.
+- GitHub Actions are pinned to commit SHAs with least-privilege permissions; Dependabot keeps
+  Actions, npm, and Docker dependencies current.
+
 ## 2.0.0
 
 A ground-up refactor. Not compatible with 1.x configuration, providers, or extension storage:

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "OpenFoxy",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "minimum_chrome_version": "111",
   "description": "Profile-based proxy routing for HTTP, SOCKS5, and residential proxies.",
   "permissions": [

@@ -2,48 +2,38 @@ name: Tests
 
 on:
   push:
-    branches: ["main"]
+    branches: [main]
   pull_request:
-    branches: ["main"]
+    branches: [main]
+
+permissions:
+  contents: read
 
 jobs:
   quality:
-    name: Format and Node Tests
+    name: Format, lint, and unit tests
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
-          node-version: "24.x"
-
-      - name: Install dependencies
-        run: npm install
-
-      - name: Check formatting
-        run: npm run format:check
-
-      - name: Run Node tests
-        run: npm test
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run check
 
   e2e:
-    name: Proxy E2E Tests
+    name: Proxy e2e (Docker)
     runs-on: ubuntu-latest
     needs: quality
     steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-
-      - name: Run E2E suite
+      - uses: actions/checkout@v7
+      - name: Single-host suite
         run: npm run test:e2e
-
-      - name: Run two-container residential suite
+      - name: Two-container residential suite
         run: npm run test:e2e:residential
-
-      - name: Logs (on failure)
+      - name: Logs on failure
         if: failure()
         run: |
-          docker compose --project-directory e2e -f e2e/docker-compose.yml logs || true
-          docker compose --project-directory e2e -f e2e/docker-compose.two-container.yml logs || true
+          docker compose -f e2e/docker-compose.yml logs || true
+          docker compose -f e2e/docker-compose.two-container.yml logs || true

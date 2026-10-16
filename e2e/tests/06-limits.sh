@@ -1,15 +1,15 @@
 section "Data Limit Enforcement"
 
-echo "Creating residential proxy with 5KB limit..."
-openfoxy add lim_user lim_pass 8091 residential --limit=5KB > /dev/null 2>&1 || {
+echo "Creating residential proxy with 64KB limit..."
+openfoxy add lim_user lim_pass 8091 residential --limit=64KB > /dev/null 2>&1 || {
   fail "add limited proxy"
   return
 }
-pass "add limited residential proxy (5KB limit)"
+pass "add limited residential proxy (64KB limit)"
 
 sleep 3
 
-LIMIT_DB=$(cat /etc/openfoxy.json 2> /dev/null)
+LIMIT_DB=$(cat /etc/openfoxy/config.json 2> /dev/null)
 if echo "$LIMIT_DB" | grep -q '"limit"'; then
   pass "limit stored in database"
 else
@@ -37,7 +37,7 @@ wait_for_port 8091 15 || {
 }
 pass "consumer listening on 8091"
 
-TOKEN=$(grep -o '"providerToken"[[:space:]]*:[[:space:]]*"[^"]*"' /etc/openfoxy.json | head -1 | cut -d'"' -f4)
+TOKEN=$(grep -o '"providerToken"[[:space:]]*:[[:space:]]*"[^"]*"' /etc/openfoxy/config.json | head -1 | cut -d'"' -f4)
 if [ -z "$TOKEN" ]; then
   fail "provider token stored for limit test"
   openfoxy delete lim_user 8091 > /dev/null 2>&1
@@ -49,8 +49,8 @@ pass "provider started for limit test"
 
 PROVIDER_READY=false
 for i in $(seq 1 30); do
-  if [ -f /var/run/openfoxy_state.json ]; then
-    STATE=$(cat /var/run/openfoxy_state.json 2> /dev/null)
+  if [ -f /var/lib/openfoxy/providers.json ]; then
+    STATE=$(cat /var/lib/openfoxy/providers.json 2> /dev/null)
     if echo "$STATE" | grep -q '"id"'; then
       PROVIDER_READY=true
       break
@@ -70,15 +70,15 @@ if [ "$PROVIDER_READY" = true ]; then
     fail "request succeeds before limit reached (HTTP $CODE)"
   fi
 
-  echo "Generating traffic to exceed 5KB limit..."
-  for i in $(seq 1 20); do
+  echo "Generating traffic to exceed 64KB limit..."
+  for i in $(seq 1 40); do
     curl -s -o /dev/null --max-time 5 \
       --socks5-hostname lim_user:lim_pass@127.0.0.1:8091 https://icanhazip.com > /dev/null 2>&1 || true
   done
 
-  echo "Waiting for limit enforcement (syncServers interval ~10s)..."
+  echo "Waiting for limit enforcement..."
   LIMIT_ENFORCED=false
-  for i in $(seq 1 25); do
+  for i in $(seq 1 10); do
     if ! nc -z 127.0.0.1 8091 2> /dev/null; then
       LIMIT_ENFORCED=true
       break
@@ -89,7 +89,7 @@ if [ "$PROVIDER_READY" = true ]; then
   if [ "$LIMIT_ENFORCED" = true ]; then
     pass "consumer port closed after limit exceeded"
   else
-    fail "consumer port closed after limit exceeded (port still open after 25s)"
+    fail "consumer port closed after limit exceeded (port still open after 10s)"
   fi
 
   CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 \

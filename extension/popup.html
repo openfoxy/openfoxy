@@ -24,7 +24,7 @@
               />
             </svg>
           </span>
-          <span class="brand-name">PROXY<b>FOXY</b></span>
+          <span class="brand-name">OPEN<b>FOXY</b></span>
         </div>
         <div class="top-actions">
           <span class="status-pill" id="topStatus">
@@ -335,7 +335,7 @@
             <div class="settings-row">
               <div class="settings-row-label">
                 <div class="settings-label">Client Hints (Sec-CH-UA)</div>
-                <div class="settings-hint">Match Sec-CH-UA-* with profile UA</div>
+                <div class="settings-hint">Match Sec-CH-UA-Mobile/Platform with profile UA</div>
               </div>
               <div class="switch on" data-key="clientHints"></div>
             </div>
@@ -522,7 +522,7 @@
                 <div class="settings-label">Strip referrer</div>
                 <div class="settings-hint">Remove Referer instead of using browser default</div>
               </div>
-              <div class="switch referrer-switch" data-key="referrer"></div>
+              <div class="switch referrer-switch" data-key="stripReferrer"></div>
             </div>
             <div class="settings-row">
               <div class="settings-row-label">
@@ -612,7 +612,7 @@
           </div>
         </div>
 
-        <div class="settings-about">OpenFoxy · v1.0.1</div>
+        <div class="settings-about" id="aboutVersion">OpenFoxy</div>
       </section>
 
       <!-- ============== BOTTOM NAV ============== -->
@@ -994,6 +994,7 @@
       </div>
     </div>
 
+    <script src="presets.js"></script>
     <script src="popup.js"></script>
   </body>
 </html>

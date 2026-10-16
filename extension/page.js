@@ -1,3 +1,5 @@
+// Runs in the page's MAIN world (declared in the manifest). The User-Agent is resolved by
+// content.js and arrives in the event detail, so this file has no preset table of its own.
 (function () {
   const EVENT_NAME = "openfoxy:apply-profile";
   const applied = new Set();
@@ -6,31 +8,17 @@
   function define(target, key, value) {
     try {
       Object.defineProperty(target, key, { configurable: true, get: () => value });
-    } catch {}
+    } catch {
+      // Non-configurable properties cannot be redefined; skip them.
+    }
   }
 
   function method(target, key, fn) {
     try {
       Object.defineProperty(target, key, { configurable: true, writable: true, value: fn });
-    } catch {}
-  }
-
-  function presetUserAgent(profile) {
-    if (profile.uaCustom) return profile.uaCustom;
-    const presets = {
-      "chrome-win":
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
-      "chrome-mac":
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
-      "safari-mac":
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Safari/605.1.15",
-      "firefox-win":
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:127.0) Gecko/20100101 Firefox/127.0",
-      ios: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1",
-      android:
-        "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36",
-    };
-    return presets[profile.uaId] || navigator.userAgent;
+    } catch {
+      // Non-configurable properties cannot be redefined; skip them.
+    }
   }
 
   function languageList(language) {
@@ -61,9 +49,9 @@
       : { width: 1920, height: 1080 };
   }
 
-  function spoofNavigator(profile, settings) {
+  function spoofNavigator(profile, settings, userAgent) {
     const languages = languageList(profile.language);
-    define(Navigator.prototype, "userAgent", presetUserAgent(profile));
+    if (userAgent) define(Navigator.prototype, "userAgent", userAgent);
     define(Navigator.prototype, "platform", profile.platform || "Win32");
     define(Navigator.prototype, "language", languages[0]);
     define(Navigator.prototype, "languages", Object.freeze(languages));
@@ -129,7 +117,9 @@
         );
         for (let i = 0; i < data.data.length; i += 32) data.data[i] = data.data[i] ^ 1;
         ctx.putImageData(data, 0, 0);
-      } catch {}
+      } catch {
+        // Tainted or zero-sized canvases cannot be read; leave them untouched.
+      }
     };
     const toDataURL = HTMLCanvasElement.prototype.toDataURL;
     const toBlob = HTMLCanvasElement.prototype.toBlob;
@@ -310,8 +300,8 @@
 
   function apply(config) {
     if (!config?.profile) return;
-    const { profile, settings } = config;
-    spoofNavigator(profile, settings);
+    const { profile, settings, userAgent } = config;
+    spoofNavigator(profile, settings, userAgent);
     spoofScreen(profile, settings);
     spoofIntl(profile);
     spoofCanvas(settings);
@@ -323,5 +313,12 @@
     spoofMisc(settings);
   }
 
-  window.addEventListener(EVENT_NAME, (event) => apply(event.detail));
+  window.addEventListener(EVENT_NAME, (event) => {
+    if (typeof event.detail !== "string") return;
+    try {
+      apply(JSON.parse(event.detail));
+    } catch {
+      // Ignore events that were not produced by content.js.
+    }
+  });
 })();

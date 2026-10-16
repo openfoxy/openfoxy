@@ -1,9 +1,6 @@
 node_modules/
 chrome/
-.git/
-.husky/_/
-*.log
 package-lock.json
-extension/icons/**/*.png
-assets/*.png
-assets/*.svg
+extension/icons/
+assets/
+.husky/_/

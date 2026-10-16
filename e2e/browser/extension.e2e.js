@@ -1,10 +1,14 @@
-const { spawn, execFileSync } = require("child_process");
-const fs = require("fs");
-const net = require("net");
-const os = require("os");
-const path = require("path");
+// Drives a real Chrome with the unpacked extension through CDP. The docker compose browser
+// stack (e2e/docker-compose.browser.yml) provides the HTTP (18080), SOCKS5 (11080) and
+// residential (18083) proxies on localhost.
+import { spawn } from "node:child_process";
+import fs from "node:fs";
+import net from "node:net";
+import os from "node:os";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 
-const ROOT = path.resolve(__dirname, "..");
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const EXTENSION_DIR = path.join(ROOT, "extension");
 const TEST_URL = "https://icanhazip.com/";
 
@@ -174,17 +178,14 @@ async function evaluate(client, expression, awaitPromise = true) {
   return result.result?.value;
 }
 
-async function connectExtension(sw, profile) {
+// Runs a service-worker function that returns a promise and polls for its JSON result,
+// because Runtime.evaluate cannot await promises from the worker reliably across restarts.
+async function runInWorker(sw, call) {
   await evaluate(
     sw,
     `(() => {
-    const profile = ${JSON.stringify(profile)};
-    const settings = { killSwitch: true };
     globalThis.__openFoxyE2eResult = "pending";
-    const run = globalThis.openFoxyTestApi
-      ? globalThis.openFoxyTestApi.connectProfile(profile, settings)
-      : connectProfile(profile, settings);
-    Promise.resolve(run)
+    ${call}
       .then((result) => { globalThis.__openFoxyE2eResult = JSON.stringify(result); })
       .catch((error) => { globalThis.__openFoxyE2eResult = JSON.stringify({ ok: false, error: error.message }); });
     return true;
@@ -193,21 +194,19 @@ async function connectExtension(sw, profile) {
   return waitForWorkerResult(sw);
 }
 
-async function disconnectExtension(sw) {
-  await evaluate(
+function connectExtension(sw, profile) {
+  return runInWorker(sw, `connectProfile(${JSON.stringify(profile)}, { killSwitch: true })`);
+}
+
+function disconnectExtension(sw) {
+  return runInWorker(sw, "disconnectProfile()");
+}
+
+function readSession(sw) {
+  return runInWorker(
     sw,
-    `(() => {
-    globalThis.__openFoxyE2eResult = "pending";
-    const run = globalThis.openFoxyTestApi
-      ? globalThis.openFoxyTestApi.disconnectProfile()
-      : disconnectProfile();
-    Promise.resolve(run)
-      .then((result) => { globalThis.__openFoxyE2eResult = JSON.stringify(result); })
-      .catch((error) => { globalThis.__openFoxyE2eResult = JSON.stringify({ ok: false, error: error.message }); });
-    return true;
-  })()`,
+    `chrome.storage.local.get("openfoxy.session").then((data) => data["openfoxy.session"] || null)`,
   );
-  return waitForWorkerResult(sw);
 }
 
 async function proxyConfig(sw) {
@@ -233,13 +232,13 @@ async function waitForWorkerResult(sw, timeoutMs = 30000) {
 async function waitForWorkerApi(sw, timeoutMs = 30000) {
   const started = Date.now();
   while (Date.now() - started < timeoutMs) {
-    const ready = await evaluate(sw, "!!globalThis.openFoxyTestApi?.connectProfile", true).catch(
+    const ready = await evaluate(sw, 'typeof connectProfile === "function"', true).catch(
       () => false,
     );
     if (ready) return;
     await sleep(250);
   }
-  return false;
+  throw new Error("Timed out waiting for the extension service worker to expose connectProfile.");
 }
 
 async function newPage(port, url) {
@@ -331,17 +330,7 @@ async function main() {
     const sw = new CdpClient(swTarget.webSocketDebuggerUrl);
     await sw.connect();
     await sw.send("Runtime.enable");
-    const workerApiReady = await waitForWorkerApi(sw);
-    if (!workerApiReady) {
-      if (process.env.OPENFOXY_STRICT_BROWSER_E2E === "1") {
-        throw new Error("Timed out waiting for extension service worker test API.");
-      }
-      console.log(
-        "Loaded the extension in Chrome, but this Chrome/CDP build does not expose the service worker test API; skipping direct browser proxy cases. Set OPENFOXY_STRICT_BROWSER_E2E=1 to fail instead.",
-      );
-      sw.close();
-      return;
-    }
+    await waitForWorkerApi(sw);
 
     const page = await newPage(debugPort, "about:blank");
     await page.send("Network.enable");
@@ -407,6 +396,8 @@ async function main() {
           connectResult && connectResult.ok,
           `Extension connect failed for ${testCase.profile.protocol}: ${JSON.stringify(connectResult)}`,
         );
+        const session = await readSession(sw);
+        assert(session?.connected === true, `${testCase.name} did not persist session state.`);
         const config = await proxyConfig(sw);
         assert(config.mode === "pac_script", `${testCase.name} did not install PAC script.`);
         assert(
@@ -439,11 +430,15 @@ async function main() {
     await sleep(1000);
     try {
       fs.rmSync(profileDir, { recursive: true, force: true });
-    } catch {}
+    } catch (error) {
+      console.warn(`Could not remove ${profileDir}: ${error.message}`);
+    }
   }
 }
 
-main().catch((error) => {
+try {
+  await main();
+} catch (error) {
   console.error(`Browser extension e2e failed: ${error.message}`);
   process.exit(1);
-});
+}

@@ -12,7 +12,7 @@ wait_for_port 9000 20 || {
 }
 pass "gateway up for provider tests"
 
-TOKEN=$(grep -o '"providerToken"[[:space:]]*:[[:space:]]*"[^"]*"' /etc/openfoxy.json | head -1 | cut -d'"' -f4)
+TOKEN=$(grep -o '"providerToken"[[:space:]]*:[[:space:]]*"[^"]*"' /etc/openfoxy/config.json | head -1 | cut -d'"' -f4)
 if [ -z "$TOKEN" ]; then
   fail "provider token stored for provider tests"
   openfoxy delete pm_user 8093 > /dev/null 2>&1 || true
@@ -25,8 +25,8 @@ pass "provider started for provider tests"
 echo "Waiting for provider to connect..."
 PROVIDER_IP=""
 for i in $(seq 1 30); do
-  if [ -f /var/run/openfoxy_state.json ]; then
-    STATE=$(cat /var/run/openfoxy_state.json 2> /dev/null)
+  if [ -f /var/lib/openfoxy/providers.json ]; then
+    STATE=$(cat /var/lib/openfoxy/providers.json 2> /dev/null)
     if echo "$STATE" | grep -q '"ip"'; then
       PROVIDER_IP=$(echo "$STATE" | grep -o '"ip"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | cut -d'"' -f4)
       break
@@ -46,21 +46,21 @@ pass "provider connected for management tests"
 echo "Testing providers list command..."
 assert_output "providers list shows connected IP" "$PROVIDER_IP" openfoxy providers
 
-echo "Testing blacklist..."
+echo "Testing block list..."
 openfoxy providers block "$PROVIDER_IP" suspicious > /dev/null 2>&1 || {
   fail "block provider"
   return
 }
 pass "block provider IP"
-assert_output "providers list shows blacklisted IP" "$PROVIDER_IP" openfoxy providers
+assert_output "providers list shows blocked IP" "$PROVIDER_IP" openfoxy providers
 assert_output "providers list shows reason" "suspicious" openfoxy providers
 
 sleep 3
-PROVIDER_STATE=$(cat /var/run/openfoxy_state.json 2> /dev/null)
+PROVIDER_STATE=$(cat /var/lib/openfoxy/providers.json 2> /dev/null)
 if echo "$PROVIDER_STATE" | grep -q "$PROVIDER_IP"; then
-  fail "blacklisted provider was disconnected"
+  fail "blocked provider was disconnected"
 else
-  pass "blacklisted provider was disconnected"
+  pass "blocked provider was disconnected"
 fi
 
 CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 \
@@ -81,8 +81,8 @@ pass "unblock provider IP"
 sleep 5
 PROVIDER_BACK=false
 for i in $(seq 1 20); do
-  if [ -f /var/run/openfoxy_state.json ]; then
-    STATE=$(cat /var/run/openfoxy_state.json 2> /dev/null)
+  if [ -f /var/lib/openfoxy/providers.json ]; then
+    STATE=$(cat /var/lib/openfoxy/providers.json 2> /dev/null)
     if echo "$STATE" | grep -q '"ip"'; then
       PROVIDER_BACK=true
       break
@@ -97,26 +97,26 @@ else
   fail "provider reconnected after unblock (timeout)"
 fi
 
-echo "Testing whitelist..."
-openfoxy providers whitelist "$PROVIDER_IP" > /dev/null 2>&1 || {
-  fail "whitelist provider"
+echo "Testing allowlist..."
+openfoxy providers allow "$PROVIDER_IP" > /dev/null 2>&1 || {
+  fail "allowlist provider"
   return
 }
-pass "whitelist provider IP"
-assert_output "providers list shows whitelist" "$PROVIDER_IP" openfoxy providers
+pass "allowlist provider IP"
+assert_output "providers list shows allowlist" "$PROVIDER_IP" openfoxy providers
 
-echo "Testing whitelist removal..."
-openfoxy providers unwhitelist "$PROVIDER_IP" > /dev/null 2>&1 || {
-  fail "unwhitelist provider"
+echo "Testing allowlist removal..."
+openfoxy providers disallow "$PROVIDER_IP" > /dev/null 2>&1 || {
+  fail "disallow provider"
   return
 }
-pass "unwhitelist provider IP"
+pass "disallow provider IP"
 
-BL_FILE=$(cat /etc/openfoxy_blacklist.json 2> /dev/null)
-if echo "$BL_FILE" | grep -q "$PROVIDER_IP"; then
-  fail "blacklist should be empty after unblock"
+ACCESS_FILE=$(cat /etc/openfoxy/access.json 2> /dev/null)
+if echo "$ACCESS_FILE" | grep -q "$PROVIDER_IP"; then
+  fail "access lists should be empty after unblock/disallow"
 else
-  pass "blacklist is clean"
+  pass "access lists are clean"
 fi
 
 kill "$PROVIDER_PID" > /dev/null 2>&1 || true

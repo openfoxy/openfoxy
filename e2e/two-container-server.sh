@@ -78,7 +78,7 @@ wait_for_port 127.0.0.1 8083 40 && pass "server consumer listens on 8083" || {
   exit 1
 }
 
-TOKEN=$(grep -o '"providerToken"[[:space:]]*:[[:space:]]*"[^"]*"' /etc/openfoxy.json | head -1 | cut -d'"' -f4)
+TOKEN=$(grep -o '"providerToken"[[:space:]]*:[[:space:]]*"[^"]*"' /etc/openfoxy/config.json | head -1 | cut -d'"' -f4)
 if [ -z "$TOKEN" ]; then
   fail "server stored provider token"
   exit 1
@@ -88,7 +88,7 @@ pass "server published provider token"
 
 CONNECTED=false
 for _ in $(seq 1 90); do
-  if [ -f /var/run/openfoxy_state.json ] && grep -q '"id"' /var/run/openfoxy_state.json; then
+  if [ -f /var/lib/openfoxy/providers.json ] && grep -q '"id"' /var/lib/openfoxy/providers.json; then
     CONNECTED=true
     break
   fi
@@ -111,7 +111,7 @@ assert_code "HTTP CONNECT residential relay forwards via provider container" "20
 assert_fail "HTTP CONNECT rejects bad credentials" \
   curl -s -o /dev/null --max-time 10 -x http://res_user:wrong@127.0.0.1:8083 https://icanhazip.com
 
-if openfoxy status | grep -q "Residential Provider Pool"; then
+if openfoxy status | grep -q "Residential provider pool"; then
   pass "status shows connected provider pool"
 else
   fail "status shows connected provider pool"

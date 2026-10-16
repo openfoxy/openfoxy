@@ -33,8 +33,8 @@ npm run test:browser
 | `e2e/two-container-*.sh`               | Entrypoints for the two-container residential simulation.             |
 | `e2e/docker-compose.browser.yml`       | Host-exposed proxy stack for real browser-extension tests.            |
 | `e2e/browser-*.sh`                     | Entrypoints for browser e2e proxy server/provider containers.         |
-| `tests/sanity.test.js`                 | Node sanity/unit-style checks for CLI parsing and extension helpers.  |
-| `tests/browser-extension-e2e.js`       | Chrome for Testing automation for real extension proxy routing.       |
+| `test/*.test.js`                       | Node unit and in-process integration tests (`npm test`).              |
+| `e2e/browser/extension.e2e.js`         | Chrome for Testing automation for real extension proxy routing.       |
 
 ## Architecture
 
@@ -61,11 +61,11 @@ npm run test:browser
 | ------------------- | ----------- | --------------------------------------------------------------------------------------------------------------------- |
 | `01-http.sh`        | HTTP        | Squid setup, authenticated request, bad creds rejected, unauthenticated blocked, teardown.                            |
 | `02-socks5.sh`      | SOCKS5      | Dante setup, authenticated request, bad creds rejected, teardown.                                                     |
-| `03-mtproto.sh`     | MTProto     | MTG setup, port listening, list/status output, teardown.                                                              |
+| `03-mtproto.sh`     | MTProto     | mtg v2 daemon listening, FakeTLS Telegram link, list/status output, teardown.                                         |
 | `04-residential.sh` | Residential | Master gateway + consumer port, provider auto-join, SOCKS5 auth relay through provider, status pool output, teardown. |
 | `05-stats.sh`       | Analytics   | Traffic generation, `status` output parsing (port, protocol, traffic section, service state).                         |
-| `06-limits.sh`      | Limits      | Residential data limit storage, display, traffic generation, and post-limit rejection.                                |
-| `07-providers.sh`   | Management  | `providers list`, block/unblock IP, auto-disconnect on blacklist, reconnect after unblock, whitelist add/remove.      |
+| `06-limits.sh`      | Limits      | Residential data limit storage, display, immediate enforcement, and post-limit rejection.                             |
+| `07-providers.sh`   | Management  | `providers` list, block/unblock IP, disconnect on block, reconnect after unblock, allowlist add/remove.               |
 | `08-change.sh`      | Hot reload  | HTTP password change, old credential rejection, residential `--limit` and `--country` updates.                        |
 | `09-lifecycle.sh`   | Lifecycle   | `list` output, `stop`/`start` cycle, input validation (shell injection, bad port, out-of-range port).                 |
 
@@ -77,9 +77,9 @@ Add a new test file following the convention:
 # e2e/tests/10-my-test.sh
 section "My New Test"
 
-openfoxy add test_user test_pass 9000 http
+openfoxy add test_user test_pass 8100 http
 # ... assertions using pass(), fail(), assert_http(), etc.
-openfoxy delete test_user 9000
+openfoxy delete test_user 8100
 ```
 
 Then append to `e2e/run.sh`:

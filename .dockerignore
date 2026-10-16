@@ -1,0 +1,10 @@
+.git
+.github
+.husky
+node_modules
+chrome
+extension
+assets
+test
+e2e/browser
+*.md

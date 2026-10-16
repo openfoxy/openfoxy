@@ -1,26 +1,36 @@
 {
   "name": "openfoxy",
-  "version": "1.0.1",
-  "description": "Distributed Multi-Protocol Proxy Manager with Residential Node Networking",
+  "version": "2.0.0",
+  "description": "Self-hosted HTTP, SOCKS5, MTProto, and residential proxy manager for Linux servers",
+  "type": "module",
   "bin": {
-    "openfoxy": "./index.js"
+    "openfoxy": "bin/openfoxy.js"
   },
+  "files": [
+    "bin",
+    "src"
+  ],
   "scripts": {
-    "prepare": "command -v husky >/dev/null 2>&1 && husky || true",
-    "format": "prettier --write \"**/*.{js,json,md,yml,yaml,css,html,sh}\"",
-    "format:check": "prettier --check \"**/*.{js,json,md,yml,yaml,css,html,sh}\"",
-    "lint": "npm run format:check && node --check index.js && node --check extension/background.js && node --check extension/content.js && node --check extension/page.js && node --check extension/popup.js && node --check tests/sanity.test.js && node --check tests/browser-extension-e2e.js",
-    "test": "node tests/sanity.test.js",
-    "test:e2e": "docker compose --project-directory e2e -f e2e/docker-compose.yml up --build --abort-on-container-exit",
-    "test:e2e:residential": "docker compose --project-directory e2e -f e2e/docker-compose.two-container.yml up --build --abort-on-container-exit",
-    "test:browser": "docker compose --project-directory e2e -f e2e/docker-compose.browser.yml up --build -d && node tests/browser-extension-e2e.js"
+    "prepare": "husky",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "lint": "eslint .",
+    "test": "node --test \"test/**/*.test.js\"",
+    "check": "npm run format:check && npm run lint && npm test",
+    "test:e2e": "docker compose -f e2e/docker-compose.yml up --build --abort-on-container-exit --exit-code-from server",
+    "test:e2e:residential": "docker compose -f e2e/docker-compose.two-container.yml up --build --abort-on-container-exit --exit-code-from server",
+    "test:browser": "docker compose -f e2e/docker-compose.browser.yml up --build -d && node e2e/browser/extension.e2e.js"
   },
   "lint-staged": {
-    "*.{js,json,md,yml,yaml,css,html,sh}": "prettier --write"
+    "*.js": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.{json,md,yml,yaml,css,html,sh}": "prettier --write"
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/openfoxy/openfoxy.git"
+    "url": "git+https://github.com/openfoxy/openfoxy.git"
   },
   "keywords": [
     "proxy",
@@ -29,18 +39,20 @@
     "dante",
     "mtproto",
     "residential-proxy",
-    "vpn",
     "networking"
   ],
   "author": "Max Ymlev",
   "license": "MIT",
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=22"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.12.0",
+    "globals": "^17.13.0",
     "husky": "^9.1.7",
-    "lint-staged": "^17.0.8",
-    "prettier": "^3.9.4",
-    "prettier-plugin-sh": "^0.18.1"
+    "lint-staged": "^17.6.0",
+    "prettier": "^3.9.10",
+    "prettier-plugin-sh": "^0.20.2"
   }
 }

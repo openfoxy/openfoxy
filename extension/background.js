@@ -1,31 +1,73 @@
-const STORE_KEY = "openfoxy.v2";
+importScripts("presets.js");
+
+// Storage ownership: the popup writes CONFIG_KEY, this worker writes SESSION_KEY.
+// Keeping the two objects separate means neither side can overwrite the other's fields.
+const CONFIG_KEY = "openfoxy.config";
+const SESSION_KEY = "openfoxy.session";
+
+const SESSION_SAVE_DELAY_MS = 500;
+const IP_LOOKUP_TIMEOUT_MS = 8000;
+const REQUEST_OVERHEAD_BYTES = 200;
+
+// Only these settings influence the proxy or the DNR rules. Changing any other setting
+// (theme, fingerprint toggles, ...) must not reconnect the active profile.
+const CONNECTION_SETTING_KEYS = [
+  "killSwitch",
+  "blockTrackers",
+  "dnt",
+  "gpc",
+  "stripReferrer",
+  "clientHints",
+];
+
+// Anchored declarativeNetRequest filters: `||` anchors to a domain (and its subdomains),
+// `^` is a separator so `||facebook.com/tr^` matches /tr and /tr/?x but not /track.
+const TRACKER_FILTERS = [
+  "||doubleclick.net^",
+  "||google-analytics.com^",
+  "||googletagmanager.com^",
+  "||facebook.net^",
+  "||facebook.com/tr^",
+  "||hotjar.com^",
+  "||segment.io^",
+  "||mixpanel.com^",
+  "||scorecardresearch.com^",
+  "||adnxs.com^",
+  "||taboola.com^",
+  "||outbrain.com^",
+];
+
+// Dynamic rule IDs are fixed and bounded: one header rule followed by one rule per tracker.
+const HEADER_RULE_ID = 1000;
+const TRACKER_RULE_ID_BASE = 1001;
+const DNR_RULE_IDS = Array.from(
+  { length: 1 + TRACKER_FILTERS.length },
+  (_, i) => HEADER_RULE_ID + i,
+);
+const DNR_RESOURCE_TYPES = [
+  "main_frame",
+  "sub_frame",
+  "script",
+  "image",
+  "xmlhttprequest",
+  "media",
+  "font",
+  "stylesheet",
+  "other",
+];
+
+const AUTHENTICATED_SOCKS5_ERROR =
+  "Chrome extensions cannot authenticate SOCKS5 proxies. Use an HTTP/residential profile, unauthenticated SOCKS5, or a local HTTP-to-SOCKS bridge.";
 
 let activeProfile = null;
 let activeSettings = {};
 let connected = false;
+let connectionError = "";
 let stats = { upload: 0, download: 0 };
 let proxyIp = null;
-let authListenerInstalled = false;
-let saveTimer = null;
+let sessionSaveTimer = null;
+// Incremented by every connect/disconnect so a slower, older request can detect it was superseded.
 let connectionSeq = 0;
-
-const TRACKER_HOSTS = [
-  "doubleclick.net",
-  "google-analytics.com",
-  "googletagmanager.com",
-  "facebook.net",
-  "facebook.com/tr",
-  "hotjar.com",
-  "segment.io",
-  "mixpanel.com",
-  "scorecardresearch.com",
-  "adnxs.com",
-  "taboola.com",
-  "outbrain.com",
-];
-const DNR_RULE_IDS = Array.from({ length: TRACKER_HOSTS.length + 8 }, (_, i) => i + 1000);
-const AUTHENTICATED_SOCKS5_ERROR =
-  "Chrome extensions cannot authenticate SOCKS5 proxies. Use an HTTP/residential profile, unauthenticated SOCKS5, or a local HTTP-to-SOCKS bridge.";
 
 function hasProxyCredentials(profile) {
   return !!(String(profile?.user || "").trim() || String(profile?.pass || "").trim());
@@ -48,13 +90,13 @@ function normalizeHost(host) {
 
 function proxyChallengeMatches(details, profile) {
   if (!details?.challenger) return true;
-  const expectedHost = normalizeHost(profile?.host);
-  const challengeHost = normalizeHost(details.challenger.host);
-  const expectedPort = Number(profile?.port);
-  const challengePort = Number(details.challenger.port);
-  return expectedHost === challengeHost && expectedPort === challengePort;
+  return (
+    normalizeHost(profile?.host) === normalizeHost(details.challenger.host) &&
+    Number(profile?.port) === Number(details.challenger.port)
+  );
 }
 
+// Credentials are only ever offered to the active proxy itself, never to origin servers.
 function proxyAuthCredentialsFor(details) {
   if (
     !details?.isProxy ||
@@ -72,7 +114,7 @@ function proxyAuthCredentialsFor(details) {
   };
 }
 
-function normalizeProtocol(protocol) {
+function pacScheme(protocol) {
   return protocol === "socks5" ? "SOCKS5" : "PROXY";
 }
 
@@ -80,7 +122,7 @@ function proxyAddress(profile) {
   const host = String(profile.host || "").trim();
   const port = Number(profile.port);
   if (!host || !Number.isInteger(port) || port < 1 || port > 65535) return "DIRECT";
-  return `${normalizeProtocol(profile.protocol)} ${host}:${port}`;
+  return `${pacScheme(profile.protocol)} ${host}:${port}`;
 }
 
 function normalizePattern(pattern) {
@@ -104,8 +146,10 @@ function buildPacScript(profile, settings = {}) {
     return `function FindProxyForURL(url, host) { return "DIRECT"; }`;
   }
 
-  let proxy = proxyAddress(profile);
+  // With the kill switch, traffic that should not use the proxy is sent to a dead port
+  // instead of silently leaking out directly.
   const fallback = settings.killSwitch ? "PROXY 127.0.0.1:9" : "DIRECT";
+  let proxy = proxyAddress(profile);
   if (proxy === "DIRECT") proxy = fallback;
   const patterns = JSON.stringify(parsePatterns(profile.patterns));
   const activation = profile.activation || "all";
@@ -128,69 +172,11 @@ function buildPacScript(profile, settings = {}) {
 
 function buildProxyConfig(profile, settings = {}) {
   if (!profile) return { mode: "direct" };
+  const mandatory = !!settings.killSwitch;
   if (profile.activation === "pac" && String(profile.pacUrl || "").trim()) {
-    return {
-      mode: "pac_script",
-      pacScript: { url: profile.pacUrl.trim(), mandatory: !!settings.killSwitch },
-    };
+    return { mode: "pac_script", pacScript: { url: profile.pacUrl.trim(), mandatory } };
   }
-  return {
-    mode: "pac_script",
-    pacScript: { data: buildPacScript(profile, settings), mandatory: !!settings.killSwitch },
-  };
-}
-
-function actionIconPaths(theme = "light") {
-  const prefix = theme === "dark" ? "icons/dark/" : "icons/";
-  return {
-    16: `${prefix}icon16.png`,
-    32: `${prefix}icon32.png`,
-    48: `${prefix}icon48.png`,
-    128: `${prefix}icon128.png`,
-  };
-}
-
-async function updateActionIcon(theme) {
-  if (typeof chrome === "undefined" || !chrome.action?.setIcon) return;
-  await chrome.action.setIcon({ path: actionIconPaths(theme) });
-}
-
-async function refreshProxyIp() {
-  const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
-  const timeout = controller ? setTimeout(() => controller.abort(), 8000) : null;
-  try {
-    const response = await fetch(`https://icanhazip.com/?openfoxy=${Date.now()}`, {
-      cache: "no-store",
-      signal: controller?.signal,
-    });
-    const text = (await response.text()).trim();
-    proxyIp = /^\d{1,3}(?:\.\d{1,3}){3}$/.test(text) ? text : null;
-  } catch {
-    proxyIp = null;
-  } finally {
-    if (timeout) clearTimeout(timeout);
-  }
-  scheduleStatsSave();
-  return proxyIp;
-}
-
-function presetUserAgent(profile) {
-  if (profile?.uaCustom) return profile.uaCustom;
-  if (!profile?.uaId || profile.uaId === "current") return undefined;
-  const presets = {
-    "chrome-win":
-      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
-    "chrome-mac":
-      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
-    "safari-mac":
-      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Safari/605.1.15",
-    "firefox-win":
-      "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:127.0) Gecko/20100101 Firefox/127.0",
-    ios: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1",
-    android:
-      "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36",
-  };
-  return presets[profile?.uaId] || null;
+  return { mode: "pac_script", pacScript: { data: buildPacScript(profile, settings), mandatory } };
 }
 
 function languageHeader(profile) {
@@ -201,198 +187,185 @@ function languageHeader(profile) {
   return base && base !== language ? `${language},${base};q=0.9` : language;
 }
 
-function setHeader(headers, name, value) {
-  const idx = headers.findIndex((h) => h.name.toLowerCase() === name.toLowerCase());
-  if (value === undefined) return;
-  if (value === null || value === "") {
-    if (idx >= 0) headers.splice(idx, 1);
-    return;
+// Derives Sec-CH-UA-Mobile / Sec-CH-UA-Platform values from the User-Agent string itself,
+// so presets and custom User-Agents are handled the same way.
+function clientHintsFor(userAgent) {
+  const platforms = [
+    [/iPhone|iPad/, "iOS"],
+    [/Android/, "Android"],
+    [/Windows/, "Windows"],
+    [/Macintosh/, "macOS"],
+    [/Linux|X11/, "Linux"],
+  ];
+  const platform = platforms.find(([pattern]) => pattern.test(userAgent))?.[1];
+  return { mobile: /\bMobile\b/.test(userAgent) ? "?1" : "?0", platform };
+}
+
+function buildRequestHeaders(profile, settings) {
+  const headers = [];
+  const set = (header, value) => headers.push({ header, operation: "set", value });
+  const userAgent = globalThis.OpenFoxyPresets.resolveUserAgent(profile);
+  const language = languageHeader(profile);
+
+  if (userAgent) set("User-Agent", userAgent);
+  if (language) set("Accept-Language", language);
+  if (settings.dnt) set("DNT", "1");
+  if (settings.gpc) set("Sec-GPC", "1");
+  if (settings.clientHints && userAgent) {
+    const { mobile, platform } = clientHintsFor(userAgent);
+    set("Sec-CH-UA-Mobile", mobile);
+    if (platform) set("Sec-CH-UA-Platform", JSON.stringify(platform));
   }
-  if (idx >= 0) headers[idx].value = value;
-  else headers.push({ name, value });
+  if (settings.stripReferrer) headers.push({ header: "Referer", operation: "remove" });
+  return headers;
+}
+
+// Pure: returns the declarativeNetRequest dynamic rules for a profile and settings.
+// MV3 cannot rewrite headers via webRequest, so DNR is the only place this can happen.
+function buildDynamicRules(profile, settings = {}) {
+  const rules = [];
+  const requestHeaders = buildRequestHeaders(profile, settings);
+  if (requestHeaders.length) {
+    rules.push({
+      id: HEADER_RULE_ID,
+      priority: 2,
+      action: { type: "modifyHeaders", requestHeaders },
+      condition: { urlFilter: "|http", resourceTypes: DNR_RESOURCE_TYPES },
+    });
+  }
+  if (settings.blockTrackers) {
+    TRACKER_FILTERS.forEach((urlFilter, index) => {
+      rules.push({
+        id: TRACKER_RULE_ID_BASE + index,
+        priority: 1,
+        action: { type: "block" },
+        condition: { urlFilter, resourceTypes: DNR_RESOURCE_TYPES },
+      });
+    });
+  }
+  return rules;
 }
 
 async function updateDeclarativeRules(profile, settings = {}) {
-  if (typeof chrome === "undefined" || !chrome.declarativeNetRequest?.updateDynamicRules) return;
-  const addRules = [];
-  let id = DNR_RULE_IDS[0];
-  if (settings.blockTrackers) {
-    for (const tracker of TRACKER_HOSTS) {
-      addRules.push({
-        id: id++,
-        priority: 1,
-        action: { type: "block" },
-        condition: {
-          urlFilter: tracker,
-          resourceTypes: [
-            "main_frame",
-            "sub_frame",
-            "script",
-            "image",
-            "xmlhttprequest",
-            "media",
-            "font",
-            "stylesheet",
-            "other",
-          ],
-        },
-      });
-    }
-  }
-  const requestHeaders = [];
-  const ua = presetUserAgent(profile);
-  const language = languageHeader(profile);
-  if (ua) requestHeaders.push({ header: "User-Agent", operation: "set", value: ua });
-  if (language)
-    requestHeaders.push({ header: "Accept-Language", operation: "set", value: language });
-  if (settings.dnt) requestHeaders.push({ header: "DNT", operation: "set", value: "1" });
-  if (settings.gpc) requestHeaders.push({ header: "Sec-GPC", operation: "set", value: "1" });
-  if (settings.referrer === "no-referrer")
-    requestHeaders.push({ header: "Referer", operation: "remove" });
-  if (requestHeaders.length) {
-    addRules.push({
-      id: id++,
-      priority: 2,
-      action: { type: "modifyHeaders", requestHeaders },
-      condition: {
-        urlFilter: "|http",
-        resourceTypes: [
-          "main_frame",
-          "sub_frame",
-          "script",
-          "image",
-          "xmlhttprequest",
-          "media",
-          "font",
-          "stylesheet",
-          "other",
-        ],
-      },
-    });
-  }
-  await chrome.declarativeNetRequest.updateDynamicRules({ removeRuleIds: DNR_RULE_IDS, addRules });
+  await chrome.declarativeNetRequest.updateDynamicRules({
+    removeRuleIds: DNR_RULE_IDS,
+    addRules: buildDynamicRules(profile, settings),
+  });
 }
 
-function applyPrivacyHeaders(headers, profile, settings, url) {
-  const next = [...(headers || [])];
-  setHeader(next, "User-Agent", presetUserAgent(profile));
-  setHeader(next, "Accept-Language", languageHeader(profile));
-  setHeader(next, "DNT", settings.dnt ? "1" : null);
-  setHeader(next, "Sec-GPC", settings.gpc ? "1" : null);
-  if (settings.referrer === "no-referrer") setHeader(next, "Referer", null);
-  if (settings.referrer === "origin") {
-    try {
-      const ref = next.find((h) => h.name.toLowerCase() === "referer");
-      if (ref?.value) ref.value = new URL(ref.value).origin + "/";
-    } catch {}
-  }
-  if (settings.clientHints && presetUserAgent(profile)) {
-    const mobile = /iphone|android/i.test(presetUserAgent(profile)) ? "?1" : "?0";
-    setHeader(next, "Sec-CH-UA-Mobile", mobile);
-    setHeader(next, "Sec-CH-UA-Platform", JSON.stringify(profile.platform || "Windows"));
-  }
-  return next;
+function actionIconPaths(theme) {
+  const prefix = theme === "dark" ? "icons/dark/" : "icons/";
+  return {
+    16: `${prefix}icon16.png`,
+    32: `${prefix}icon32.png`,
+    48: `${prefix}icon48.png`,
+    128: `${prefix}icon128.png`,
+  };
 }
 
-function isTrackerUrl(url) {
-  let value;
+async function updateActionIcon(theme) {
+  await chrome.action.setIcon({ path: actionIconPaths(theme) });
+}
+
+async function refreshProxyIp() {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), IP_LOOKUP_TIMEOUT_MS);
   try {
-    value = new URL(url);
-  } catch {
-    return false;
+    const response = await fetch(`https://icanhazip.com/?openfoxy=${Date.now()}`, {
+      cache: "no-store",
+      signal: controller.signal,
+    });
+    const text = (await response.text()).trim();
+    proxyIp = /^\d{1,3}(?:\.\d{1,3}){3}$/.test(text) ? text : null;
+  } catch (error) {
+    // The exit IP is informational only; a failed lookup must not fail the connection.
+    console.warn("OpenFoxy exit IP lookup failed", error);
+    proxyIp = null;
+  } finally {
+    clearTimeout(timeout);
   }
-  const host = value.hostname.toLowerCase();
-  const full = `${host}${value.pathname}`.toLowerCase();
-  return TRACKER_HOSTS.some(
-    (tracker) => full === tracker || full.includes(tracker) || host.endsWith(`.${tracker}`),
-  );
+  scheduleSessionSave();
+  return proxyIp;
 }
 
-function installAuthHandler() {
-  if (authListenerInstalled || typeof chrome === "undefined") return;
-  chrome.webRequest.onAuthRequired.addListener(
-    (details, callback) => {
-      const authCredentials = proxyAuthCredentialsFor(details);
-      if (authCredentials) {
-        callback({ authCredentials });
-        return;
-      }
-      callback({ cancel: false });
-    },
-    { urls: ["<all_urls>"] },
-    ["asyncBlocking"],
-  );
-  authListenerInstalled = true;
+async function saveSession() {
+  clearTimeout(sessionSaveTimer);
+  sessionSaveTimer = null;
+  await chrome.storage.local.set({
+    [SESSION_KEY]: { connected, stats, proxyIp, connectionError },
+  });
 }
 
-function scheduleStatsSave() {
-  if (saveTimer || typeof chrome === "undefined") return;
-  saveTimer = setTimeout(async () => {
-    saveTimer = null;
-    try {
-      const data = await chrome.storage.local.get(STORE_KEY);
-      const store = data[STORE_KEY] || {};
-      await chrome.storage.local.set({ [STORE_KEY]: { ...store, connected, stats, proxyIp } });
-    } catch (error) {
-      console.warn("OpenFoxy failed to persist state", error);
-    }
-  }, 500);
+// Traffic counters change on every request, so they are persisted in batches.
+function scheduleSessionSave() {
+  if (sessionSaveTimer) return;
+  sessionSaveTimer = setTimeout(() => {
+    saveSession().catch((error) => console.warn("OpenFoxy failed to persist session", error));
+  }, SESSION_SAVE_DELAY_MS);
+}
+
+function chromeCallbackToPromise(invoke) {
+  return new Promise((resolve, reject) => {
+    invoke(() => {
+      const error = chrome.runtime.lastError;
+      if (error) reject(new Error(error.message));
+      else resolve();
+    });
+  });
 }
 
 function setProxyConfig(config) {
-  return new Promise((resolve, reject) => {
-    chrome.proxy.settings.set({ scope: "regular", value: config }, () => {
-      const error = chrome.runtime?.lastError;
-      if (error) reject(new Error(error.message));
-      else resolve();
-    });
-  });
+  return chromeCallbackToPromise((done) =>
+    chrome.proxy.settings.set({ scope: "regular", value: config }, done),
+  );
 }
 
 function clearProxyConfig() {
-  return new Promise((resolve, reject) => {
-    chrome.proxy.settings.clear({ scope: "regular" }, () => {
-      const error = chrome.runtime?.lastError;
-      if (error) reject(new Error(error.message));
-      else resolve();
-    });
-  });
+  return chromeCallbackToPromise((done) => chrome.proxy.settings.clear({ scope: "regular" }, done));
 }
 
-async function resetConnectionState() {
+async function resetConnectionState(error = "") {
   activeProfile = null;
   activeSettings = {};
   connected = false;
+  connectionError = error;
   stats = { upload: 0, download: 0 };
   proxyIp = null;
   await clearProxyConfig();
   await updateDeclarativeRules(null, {});
-  scheduleStatsSave();
+  await saveSession();
 }
 
-async function connectProfile(profile, settings = {}) {
+// `keepStats` is used when resuming after the worker was suspended: Chrome keeps the proxy
+// settings, so only the in-memory state needs rebuilding and counters should survive.
+async function connectProfile(profile, settings = {}, { keepStats = false } = {}) {
   const seq = ++connectionSeq;
   if (unsupportedAuthenticatedSocks5(profile)) {
-    await resetConnectionState();
+    await resetConnectionState(AUTHENTICATED_SOCKS5_ERROR);
     return { ok: false, error: AUTHENTICATED_SOCKS5_ERROR };
   }
   try {
-    stats = { upload: 0, download: 0 };
-    proxyIp = null;
-    installAuthHandler();
     await setProxyConfig(buildProxyConfig(profile, settings));
     await updateDeclarativeRules(profile, settings);
     if (seq !== connectionSeq) return { ok: false, error: "connection superseded" };
+
     activeProfile = profile;
     activeSettings = settings;
     connected = true;
-    scheduleStatsSave();
-    const refreshedIp = await refreshProxyIp();
+    connectionError = "";
+    if (!keepStats) {
+      stats = { upload: 0, download: 0 };
+      proxyIp = null;
+    }
+    await saveSession();
+
+    if (!keepStats || !proxyIp) await refreshProxyIp();
     if (seq !== connectionSeq) return { ok: false, error: "connection superseded" };
-    return { ok: true, proxyIp: refreshedIp };
+    return { ok: true, proxyIp };
   } catch (error) {
-    if (seq === connectionSeq) await resetConnectionState();
-    return { ok: false, error: error.message || "failed to configure proxy" };
+    const message = error.message || "failed to configure proxy";
+    if (seq === connectionSeq) await resetConnectionState(message);
+    return { ok: false, error: message };
   }
 }
 
@@ -402,105 +375,118 @@ async function disconnectProfile() {
   return { ok: true };
 }
 
+async function readStorage() {
+  const data = await chrome.storage.local.get([CONFIG_KEY, SESSION_KEY]);
+  return { config: data[CONFIG_KEY] || {}, session: data[SESSION_KEY] || {} };
+}
+
+function selectedProfile(config) {
+  return Array.isArray(config.profiles)
+    ? config.profiles.find((profile) => profile.id === config.activeId)
+    : undefined;
+}
+
+function connectionSettings(settings) {
+  return JSON.stringify(CONNECTION_SETTING_KEYS.map((key) => settings?.[key] ?? null));
+}
+
 async function restoreState() {
-  const data = await chrome.storage.local.get(STORE_KEY);
-  const store = data[STORE_KEY] || {};
-  stats = store.stats || stats;
-  proxyIp = store.proxyIp || null;
-  await updateActionIcon(store.actionIconTheme || "light");
-  if (
-    (store.connected || store.settings?.autoConnect) &&
-    store.activeId &&
-    Array.isArray(store.profiles)
-  ) {
-    const profile = store.profiles.find((p) => p.id === store.activeId);
-    if (profile) await connectProfile(profile, store.settings || {});
+  const { config, session } = await readStorage();
+  stats = session.stats || stats;
+  proxyIp = session.proxyIp || null;
+  await updateActionIcon(config.actionIconTheme || "light");
+
+  const profile = selectedProfile(config);
+  if (profile && (session.connected || config.settings?.autoConnect)) {
+    await connectProfile(profile, config.settings || {}, { keepStats: !!session.connected });
   } else {
     await clearProxyConfig();
+    if (session.connected) await resetConnectionState();
   }
 }
 
-async function reapplyStoredState() {
-  const data = await chrome.storage.local.get(STORE_KEY);
-  const store = data[STORE_KEY] || {};
-  await updateActionIcon(store.actionIconTheme || "light");
-  if (!connected || !store.activeId || !Array.isArray(store.profiles)) return { ok: true };
-  const profile = store.profiles.find((p) => p.id === store.activeId);
-  return profile ? connectProfile(profile, store.settings || {}) : disconnectProfile();
+// Called by the popup after it saved the config. Reconnects only if the active profile or a
+// connection-relevant setting actually changed, so merely opening the popup is side-effect free.
+async function applyStoredConfig() {
+  const { config } = await readStorage();
+  await updateActionIcon(config.actionIconTheme || "light");
+  if (!connected) return { ok: true };
+
+  const profile = selectedProfile(config);
+  if (!profile) return disconnectProfile();
+  const settings = config.settings || {};
+  const unchanged =
+    JSON.stringify(profile) === JSON.stringify(activeProfile) &&
+    connectionSettings(settings) === connectionSettings(activeSettings);
+  return unchanged ? { ok: true } : connectProfile(profile, settings);
 }
 
-if (typeof globalThis !== "undefined") {
-  globalThis.openFoxyTestApi = {
-    connectProfile,
-    disconnectProfile,
-    proxyState: () => ({ connected, profile: activeProfile, stats, proxyIp }),
-  };
-}
+// Listeners must be registered synchronously at worker startup.
+// Restoring on every worker start also covers the browser-launch and install events;
+// those listeners only exist so Chrome wakes the worker for them.
+const ready = restoreState().catch((error) => console.warn("OpenFoxy restore failed", error));
+chrome.runtime.onInstalled.addListener(() => ready);
+chrome.runtime.onStartup.addListener(() => ready);
 
-if (typeof chrome !== "undefined" && chrome.runtime?.onMessage) {
-  chrome.runtime.onInstalled?.addListener(() => restoreState());
-  chrome.runtime.onStartup?.addListener(() => restoreState());
-  restoreState();
-
-  chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-    (async () => {
-      if (message.type === "connect")
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  (async () => {
+    await ready;
+    switch (message.type) {
+      case "connect":
         return connectProfile(message.profile, message.settings || {});
-      if (message.type === "disconnect") return disconnectProfile();
-      if (message.type === "getState") return { connected, profile: activeProfile, stats, proxyIp };
-      if (message.type === "getStats") return { stats, proxyIp };
-      if (message.type === "setActionIconTheme") {
+      case "disconnect":
+        return disconnectProfile();
+      case "getState":
+        return { connected, profile: activeProfile, stats, proxyIp, connectionError };
+      case "getStats":
+        return { stats, proxyIp };
+      case "setActionIconTheme":
         await updateActionIcon(message.theme === "dark" ? "dark" : "light");
         return { ok: true };
-      }
-      if (message.type === "stateChanged") return reapplyStoredState();
-      return { ok: false, error: "unknown message" };
-    })()
-      .then(sendResponse)
-      .catch((error) => sendResponse({ ok: false, error: error.message }));
-    return true;
-  });
+      case "stateChanged":
+        return applyStoredConfig();
+      default:
+        return { ok: false, error: "unknown message" };
+    }
+  })()
+    .then(sendResponse)
+    .catch((error) => sendResponse({ ok: false, error: error.message }));
+  return true;
+});
 
-  chrome.webRequest.onBeforeRequest.addListener(
-    (details) => {
-      if (!connected || !activeProfile) return;
-      let size = 200;
-      for (const item of details.requestBody?.raw || []) size += item.bytes?.byteLength || 0;
-      stats.upload += size;
-      scheduleStatsSave();
-    },
-    { urls: ["<all_urls>"] },
-    ["requestBody"],
-  );
+chrome.webRequest.onAuthRequired.addListener(
+  (details, callback) => {
+    const authCredentials = proxyAuthCredentialsFor(details);
+    callback(authCredentials ? { authCredentials } : { cancel: false });
+  },
+  { urls: ["<all_urls>"] },
+  ["asyncBlocking"],
+);
 
-  chrome.webRequest.onHeadersReceived.addListener(
-    (details) => {
-      if (!connected || !activeProfile) return;
-      let size = 200;
-      for (const header of details.responseHeaders || []) {
-        if (header.name.toLowerCase() === "content-length") size += Number(header.value) || 0;
-      }
-      stats.download += size;
-      scheduleStatsSave();
-    },
-    { urls: ["<all_urls>"] },
-    ["responseHeaders"],
-  );
+chrome.webRequest.onBeforeRequest.addListener(
+  (details) => {
+    if (!connected || !activeProfile) return;
+    let size = REQUEST_OVERHEAD_BYTES;
+    for (const item of details.requestBody?.raw || []) size += item.bytes?.byteLength || 0;
+    stats.upload += size;
+    scheduleSessionSave();
+  },
+  { urls: ["<all_urls>"] },
+  ["requestBody"],
+);
 
-  chrome.proxy.onProxyError?.addListener((details) =>
-    console.warn("OpenFoxy proxy error", details),
-  );
-}
+chrome.webRequest.onHeadersReceived.addListener(
+  (details) => {
+    if (!connected || !activeProfile) return;
+    let size = REQUEST_OVERHEAD_BYTES;
+    for (const header of details.responseHeaders || []) {
+      if (header.name.toLowerCase() === "content-length") size += Number(header.value) || 0;
+    }
+    stats.download += size;
+    scheduleSessionSave();
+  },
+  { urls: ["<all_urls>"] },
+  ["responseHeaders"],
+);
 
-if (typeof module !== "undefined") {
-  module.exports = {
-    normalizePattern,
-    parsePatterns,
-    buildPacScript,
-    buildProxyConfig,
-    proxyAddress,
-    unsupportedAuthenticatedSocks5,
-    applyPrivacyHeaders,
-    isTrackerUrl,
-  };
-}
+chrome.proxy.onProxyError.addListener((details) => console.warn("OpenFoxy proxy error", details));

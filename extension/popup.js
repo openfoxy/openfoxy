@@ -1,4 +1,6 @@
-const STORE_KEY = "openfoxy.v2";
+// Storage ownership: the popup writes CONFIG_KEY, the background worker writes SESSION_KEY.
+// The popup only ever reads live connection state from the worker via messages.
+const CONFIG_KEY = "openfoxy.config";
 
 const EMOJI_FLAGS = [
   ["🇫🇷", "France"],
@@ -45,39 +47,7 @@ const EMOJI_OBJECTS = [
   ["⭐", "Star"],
 ].map(([e, n]) => ({ e, n }));
 
-const UA_PRESETS = [
-  { id: "current", label: "Current", ua: navigator.userAgent },
-  {
-    id: "chrome-win",
-    label: "Chrome · Win",
-    ua: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
-  },
-  {
-    id: "chrome-mac",
-    label: "Chrome · Mac",
-    ua: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
-  },
-  {
-    id: "safari-mac",
-    label: "Safari · Mac",
-    ua: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Safari/605.1.15",
-  },
-  {
-    id: "firefox-win",
-    label: "Firefox · Win",
-    ua: "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:127.0) Gecko/20100101 Firefox/127.0",
-  },
-  {
-    id: "ios",
-    label: "iPhone",
-    ua: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1",
-  },
-  {
-    id: "android",
-    label: "Android",
-    ua: "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36",
-  },
-];
+const UA_PRESETS = globalThis.OpenFoxyPresets.userAgents;
 const PRESETS = {
   platform: [
     ["Win32", "Windows"],
@@ -164,7 +134,7 @@ const DEFAULT_SETTINGS = {
   pixelRatio: true,
   prefersScheme: false,
   blockTrackers: true,
-  referrer: "strict",
+  stripReferrer: false,
   dnt: false,
   gpc: true,
   permGeo: true,
@@ -175,16 +145,18 @@ const DEFAULT_SETTINGS = {
 };
 
 const $ = (id) => document.getElementById(id);
+// Persisted fields (profiles, activeId, actionIconTheme, settings) come from CONFIG_KEY;
+// connected, connecting, connectionError, stats and proxyIp mirror the background worker.
 const state = {
   profiles: [],
   activeId: null,
+  actionIconTheme: "light",
+  settings: { ...DEFAULT_SETTINGS },
   connected: false,
   connecting: false,
   connectionError: "",
   stats: { upload: 0, download: 0 },
   proxyIp: null,
-  actionIconTheme: "light",
-  settings: { ...DEFAULT_SETTINGS },
 };
 let editingId = null;
 let form = blankProfile();
@@ -219,39 +191,49 @@ function blankProfile() {
   };
 }
 
-async function getStore() {
-  const data = await chrome.storage.local.get(STORE_KEY);
-  const stored = data[STORE_KEY] || {};
+async function loadConfig() {
+  const data = await chrome.storage.local.get(CONFIG_KEY);
+  const stored = data[CONFIG_KEY] || {};
   return {
-    profiles: [],
-    activeId: null,
-    connected: false,
-    stats: { upload: 0, download: 0 },
-    proxyIp: null,
-    actionIconTheme: browserToolbarTheme(),
-    ...stored,
+    profiles: stored.profiles || [],
+    activeId: stored.activeId || null,
+    actionIconTheme: stored.actionIconTheme || browserToolbarTheme(),
     settings: { ...DEFAULT_SETTINGS, ...(stored.settings || {}) },
   };
 }
 
-async function saveStore(patch = {}) {
-  Object.assign(state, patch);
+async function saveConfig() {
   await chrome.storage.local.set({
-    [STORE_KEY]: {
+    [CONFIG_KEY]: {
       profiles: state.profiles,
       activeId: state.activeId,
-      connected: state.connected,
-      connectionError: state.connectionError,
-      stats: state.stats,
-      proxyIp: state.proxyIp,
       actionIconTheme: state.actionIconTheme,
       settings: state.settings,
     },
   });
 }
 
-function sendMessage(message) {
-  return new Promise((resolve) => chrome.runtime.sendMessage(message, (res) => resolve(res || {})));
+// Persists the config and tells the worker to apply it. The worker only reconnects when the
+// active profile or a connection-relevant setting changed.
+async function commitConfig() {
+  await saveConfig();
+  await sendMessage({ type: "stateChanged" });
+  await refreshLiveState();
+}
+
+async function sendMessage(message) {
+  try {
+    return (await chrome.runtime.sendMessage(message)) || {};
+  } catch (error) {
+    return { ok: false, error: error.message };
+  }
+}
+
+async function refreshLiveState() {
+  const live = await sendMessage({ type: "getState" });
+  state.connected = !!live.connected;
+  state.stats = live.stats || { upload: 0, download: 0 };
+  state.proxyIp = live.proxyIp || null;
 }
 
 function browserToolbarTheme() {
@@ -260,7 +242,10 @@ function browserToolbarTheme() {
 
 async function syncActionIconTheme() {
   const actionIconTheme = browserToolbarTheme();
-  await saveStore({ actionIconTheme });
+  if (actionIconTheme !== state.actionIconTheme) {
+    state.actionIconTheme = actionIconTheme;
+    await saveConfig();
+  }
   await sendMessage({ type: "setActionIconTheme", theme: actionIconTheme });
 }
 
@@ -284,7 +269,7 @@ function formatBytes(bytes) {
 }
 
 function parseProxyString(value) {
-  let s = String(value || "")
+  const s = String(value || "")
     .trim()
     .replace(/^(socks5|socks4|https?|residential):\/\//i, "");
   if (!s) return null;
@@ -315,7 +300,7 @@ function profileProxyLabel(profile) {
   return `${profile.protocol} · ${profile.host}:${profile.port}`;
 }
 
-function setTheme(theme) {
+function applyTheme(theme) {
   state.settings.theme = theme;
   document.documentElement.setAttribute("data-theme", theme);
   document
@@ -325,7 +310,11 @@ function setTheme(theme) {
     theme === "dark"
       ? '<circle cx="12" cy="12" r="4"></circle><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"></path>'
       : '<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>';
-  saveStore().then(() => sendMessage({ type: "stateChanged" }));
+}
+
+async function setTheme(theme) {
+  applyTheme(theme);
+  await commitConfig();
 }
 
 function setConnectionUi(status) {
@@ -431,7 +420,7 @@ function renderUaChips() {
     $("uaChipGroup").appendChild(button);
   }
   const current =
-    form.uaCustom || UA_PRESETS.find((u) => u.id === form.uaId)?.ua || UA_PRESETS[0].ua;
+    form.uaCustom || UA_PRESETS.find((u) => u.id === form.uaId)?.ua || navigator.userAgent;
   $("uaCurrent").textContent = current;
   $("uaActiveLabel").textContent = form.uaCustom
     ? "custom"
@@ -547,8 +536,7 @@ async function saveProfile() {
     state.profiles.push({ id, ...form });
     if (!state.activeId) state.activeId = id;
   }
-  await saveStore();
-  await sendMessage({ type: "stateChanged" });
+  await commitConfig();
   renderProfiles();
   renderHome();
   closeModal();
@@ -556,13 +544,7 @@ async function saveProfile() {
 
 async function activateProfile(id) {
   state.activeId = id;
-  await saveStore();
-  if (state.connected)
-    await sendMessage({
-      type: "connect",
-      profile: state.profiles.find((p) => p.id === id),
-      settings: state.settings,
-    });
+  await commitConfig();
   renderProfiles();
   renderHome();
 }
@@ -570,9 +552,15 @@ async function activateProfile(id) {
 async function deleteProfile(id) {
   const wasActive = state.activeId === id;
   state.profiles = state.profiles.filter((p) => p.id !== id);
-  if (wasActive) state.activeId = state.profiles[0]?.id || null;
-  await saveStore({ connected: wasActive ? false : state.connected });
-  if (wasActive) await sendMessage({ type: "disconnect" });
+  if (wasActive) {
+    state.activeId = state.profiles[0]?.id || null;
+    // Never silently fall back to another profile: deleting the active one disconnects.
+    await saveConfig();
+    await sendMessage({ type: "disconnect" });
+    await refreshLiveState();
+  } else {
+    await commitConfig();
+  }
   renderProfiles();
   renderHome();
 }
@@ -583,12 +571,8 @@ async function toggleConnection() {
   if (!profile) return navigate("profiles");
   if (state.connected) {
     await sendMessage({ type: "disconnect" });
-    await saveStore({
-      connected: false,
-      connectionError: "",
-      stats: { upload: 0, download: 0 },
-      proxyIp: null,
-    });
+    await refreshLiveState();
+    state.connectionError = "";
     renderHome();
     return;
   }
@@ -602,16 +586,11 @@ async function toggleConnection() {
   });
   state.connecting = false;
   if (response.ok) {
-    await saveStore({
-      connected: true,
-      connectionError: "",
-      stats: { upload: 0, download: 0 },
-      proxyIp: response.proxyIp || null,
-    });
+    await refreshLiveState();
     startStatsPolling();
   } else {
+    await refreshLiveState();
     state.connectionError = response.error || "Tap to retry";
-    await saveStore({ connected: false, connectionError: state.connectionError });
     setConnectionUi("error");
     setTimeout(() => {
       state.connectionError = "";
@@ -723,26 +702,11 @@ function bindSettings() {
     );
   document.querySelectorAll(".switch[data-key]").forEach((sw) => {
     const key = sw.dataset.key;
-    sw.classList.toggle(
-      "on",
-      key === "referrer" ? state.settings.referrer === "no-referrer" : !!state.settings[key],
-    );
+    sw.classList.toggle("on", !!state.settings[key]);
     sw.addEventListener("click", async () => {
-      if (key === "referrer") {
-        state.settings.referrer =
-          state.settings.referrer === "no-referrer" ? "strict" : "no-referrer";
-        sw.classList.toggle("on", state.settings.referrer === "no-referrer");
-      } else {
-        state.settings[key] = !state.settings[key];
-        sw.classList.toggle("on", state.settings[key]);
-      }
-      await saveStore();
-      if (state.connected)
-        await sendMessage({
-          type: "connect",
-          profile: state.profiles.find((p) => p.id === state.activeId),
-          settings: state.settings,
-        });
+      state.settings[key] = !state.settings[key];
+      sw.classList.toggle("on", state.settings[key]);
+      await commitConfig();
     });
   });
   document.querySelectorAll(".settings-control-mini").forEach((group) => {
@@ -755,23 +719,22 @@ function bindSettings() {
       if (!b) return;
       state.settings[key] = b.dataset.value;
       group.querySelectorAll("button").forEach((x) => x.classList.toggle("active", x === b));
-      await saveStore();
+      await commitConfig();
     });
   });
 }
 
 async function init() {
-  Object.assign(state, await getStore());
-  const bg = await sendMessage({ type: "getState" });
-  if (bg.connected !== undefined) state.connected = bg.connected;
-  if (bg.stats) state.stats = bg.stats;
-  if (bg.proxyIp) state.proxyIp = bg.proxyIp;
+  Object.assign(state, await loadConfig());
+  await refreshLiveState();
   await syncActionIconTheme();
-  setTheme(state.settings.theme || "dark");
-  try {
-    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-    if (tz) $("tzSystemLabel").textContent = `System · ${tz.split("/").pop().replace(/_/g, " ")}`;
-  } catch {}
+  // Opening the popup must not notify the worker: it would be treated as a config change.
+  applyTheme(state.settings.theme || "dark");
+  const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  if (timeZone) {
+    $("tzSystemLabel").textContent = `System · ${timeZone.split("/").pop().replace(/_/g, " ")}`;
+  }
+  $("aboutVersion").textContent = `OpenFoxy · v${chrome.runtime.getManifest().version}`;
   buildEmojiGrid($("emojiGridFlags"), EMOJI_FLAGS);
   buildEmojiGrid($("emojiGridAnimals"), EMOJI_ANIMALS);
   buildEmojiGrid($("emojiGridObjects"), EMOJI_OBJECTS);

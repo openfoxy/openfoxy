@@ -28,7 +28,7 @@ wait_for_port 11080
 wait_for_port 18083
 wait_for_port 19000
 
-TOKEN=$(grep -o '"providerToken"[[:space:]]*:[[:space:]]*"[^"]*"' /etc/openfoxy.json | tail -1 | cut -d'"' -f4)
+TOKEN=$(grep -o '"providerToken"[[:space:]]*:[[:space:]]*"[^"]*"' /etc/openfoxy/config.json | tail -1 | cut -d'"' -f4)
 if [ -z "$TOKEN" ]; then
   echo "Residential provider token missing."
   exit 1
@@ -36,7 +36,7 @@ fi
 printf '%s' "$TOKEN" > /shared/browser-provider-token
 
 for _ in $(seq 1 120); do
-  if [ -f /var/run/openfoxy_state.json ] && grep -q '"id"' /var/run/openfoxy_state.json; then
+  if [ -f /var/lib/openfoxy/providers.json ] && grep -q '"id"' /var/lib/openfoxy/providers.json; then
     touch /shared/browser-ready
     echo "Browser e2e proxies are ready."
     tail -f /dev/null &

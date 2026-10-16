@@ -19,7 +19,7 @@ wait_for_port 8083 10 || {
 }
 pass "consumer listening on 8083"
 
-TOKEN=$(grep -o '"providerToken"[[:space:]]*:[[:space:]]*"[^"]*"' /etc/openfoxy.json | head -1 | cut -d'"' -f4)
+TOKEN=$(grep -o '"providerToken"[[:space:]]*:[[:space:]]*"[^"]*"' /etc/openfoxy/config.json | head -1 | cut -d'"' -f4)
 if [ -z "$TOKEN" ]; then
   fail "provider token stored in database"
   return
@@ -31,8 +31,8 @@ pass "provider started with token"
 echo "Waiting for provider to connect..."
 PROVIDER_READY=false
 for i in $(seq 1 30); do
-  if [ -f /var/run/openfoxy_state.json ]; then
-    STATE=$(cat /var/run/openfoxy_state.json 2> /dev/null)
+  if [ -f /var/lib/openfoxy/providers.json ]; then
+    STATE=$(cat /var/lib/openfoxy/providers.json 2> /dev/null)
     if echo "$STATE" | grep -q '"id"'; then
       PROVIDER_READY=true
       break

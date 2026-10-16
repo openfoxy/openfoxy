@@ -238,6 +238,8 @@ docker exec residential-proxy openfoxy providers   # manage providers
 
 Mount `/etc/openfoxy` as a volume to keep the provider token across container restarts.
 
+Image tags: `latest` and `X`, `X.Y`, `X.Y.Z` for releases; `edge` and `sha-<commit>` track `main`.
+
 ---
 
 ## 🧩 Browser extension
@@ -273,6 +275,26 @@ OPENFOXY_CHROME_PATH="/path/to/chrome" npm run test:browser  # real extension ro
 ```
 
 See [`e2e/README.md`](e2e/README.md) for the suite layout.
+
+### Releasing
+
+Pushes and pull requests to `main` run CI (`.github/workflows/ci.yml`); a green push to `main`
+also publishes the `edge` Docker image. To release, add a `## X.Y.Z` section to `CHANGELOG.md`,
+set the same version in `extension/manifest.json`, commit both, then:
+
+```bash
+npm version X.Y.Z -m "Release v%s"   # bumps package.json/lockfile, commits, tags vX.Y.Z
+git push --follow-tags
+```
+
+The tag triggers `release.yml`: it checks that the tag, `package.json`, the extension manifest, and
+the changelog agree and that the commit is on `main`, runs the full CI, publishes to npm (with
+provenance) and GHCR in parallel, then creates the GitHub Release with the changelog notes and the
+extension archive. Tags with a suffix (`v2.1.0-rc.1`) publish as pre-releases under npm's `next` tag.
+
+npm publishing uses [trusted publishing](https://docs.npmjs.com/trusted-publishers): register
+`openfoxy/openfoxy`, workflow `release.yml`, environment `npm` on npmjs.com. An `NPM_TOKEN`
+repository secret is used as a fallback when set.
 
 ### Layout
 

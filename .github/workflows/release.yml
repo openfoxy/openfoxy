@@ -1,0 +1,140 @@
+name: Release
+
+# Push a tag matching the package version to release, e.g.:
+#   npm version minor && git push --follow-tags
+# Pipeline: verify versions → full CI → npm + GHCR (parallel) → GitHub Release.
+on:
+  push:
+    tags: ["v[0-9]+.[0-9]+.[0-9]+", "v[0-9]+.[0-9]+.[0-9]+-*"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: Verify versions
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      prerelease: ${{ steps.version.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Require the tagged commit to be on main
+        run: |
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/main \
+            || { echo "::error::Tagged commit $GITHUB_SHA is not on main"; exit 1; }
+      - id: version
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          version="${TAG#v}"
+          pkg=$(node -p 'require("./package.json").version')
+          ext=$(node -p 'require("./extension/manifest.json").version')
+          [ "$pkg" = "$version" ] || { echo "::error::Tag $TAG does not match package.json version $pkg"; exit 1; }
+          # Chrome manifests only allow dotted numbers, so compare the release core.
+          [ "$ext" = "${version%%-*}" ] || { echo "::error::extension/manifest.json version $ext does not match $version"; exit 1; }
+          grep -Eq "^## \[?${version//./\\.}\]?( |$)" CHANGELOG.md || { echo "::error::CHANGELOG.md has no '## $version' section"; exit 1; }
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if [[ "$version" == *-* ]]; then echo "prerelease=true"; else echo "prerelease=false"; fi >> "$GITHUB_OUTPUT"
+
+  ci:
+    name: CI
+    needs: verify
+    # ci.yml declares an edge-image job (skipped on tags); callers must grant what it requests.
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/ci.yml
+
+  npm:
+    name: Publish to npm
+    needs: [verify, ci]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: npm
+      url: https://www.npmjs.com/package/openfoxy/v/${{ needs.verify.outputs.version }}
+    permissions:
+      contents: read
+      id-token: write # npm trusted publishing (OIDC) and provenance
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+          cache: npm
+      - name: Ensure npm supports trusted publishing
+        run: npm install -g npm@^11.5.1
+      - run: npm ci
+      - name: Publish
+        env:
+          VERSION: ${{ needs.verify.outputs.version }}
+          PRERELEASE: ${{ needs.verify.outputs.prerelease }}
+          # Optional fallback; leave the secret unset to use trusted publishing only.
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          if npm view "openfoxy@$VERSION" version >/dev/null 2>&1; then
+            echo "openfoxy@$VERSION is already published; skipping."
+            exit 0
+          fi
+          dist_tag=latest
+          [ "$PRERELEASE" = "true" ] && dist_tag=next
+          npm publish --provenance --access public --tag "$dist_tag"
+
+  docker:
+    name: Publish Docker image
+    needs: [verify, ci]
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/docker.yml
+    with:
+      push: true
+
+  github-release:
+    name: GitHub Release
+    needs: [verify, npm, docker]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Build release notes and extension archive
+        env:
+          VERSION: ${{ needs.verify.outputs.version }}
+        run: |
+          awk -v v="$VERSION" '
+            /^## / { if (found) exit; h = $2; gsub(/[][]/, "", h); found = (h == v); next }
+            found
+          ' CHANGELOG.md > notes.md
+          (cd extension && zip -qr "../openfoxy-extension-$VERSION.zip" .)
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+          VERSION: ${{ needs.verify.outputs.version }}
+          PRERELEASE: ${{ needs.verify.outputs.prerelease }}
+        run: |
+          asset="openfoxy-extension-$VERSION.zip"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$asset" --clobber
+            exit 0
+          fi
+          flags=()
+          [ "$PRERELEASE" = "true" ] && flags+=(--prerelease)
+          gh release create "$TAG" "$asset" --verify-tag --title "OpenFoxy $TAG" \
+            --notes-file notes.md "${flags[@]}"
